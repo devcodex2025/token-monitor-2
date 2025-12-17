@@ -157,77 +157,127 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="min-h-screen p-6">
-      <div className="max-w-7xl mx-auto">
+    <main className="min-h-screen p-4 md:p-8 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-terminal-panel via-terminal-bg to-terminal-bg">
+      <div className="max-w-6xl mx-auto space-y-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-terminal-success to-terminal-warning bg-clip-text text-transparent">
-            Pump.fun Token Monitor
-          </h1>
-          <p className="text-terminal-muted">
-            Real-time token transaction monitoring
-          </p>
-        </div>
-
-        {/* Control Panel */}
-        <div className="terminal-panel p-6 mb-6">
-          <div className="space-y-4">
-            <TokenInput
-              value={config.tokenAddress}
-              onChange={(address) =>
-                setConfig((prev) => ({ ...prev, tokenAddress: address }))
-              }
-              disabled={isMonitoring}
-            />
-
-            <DateRangePicker
-              mode={config.mode}
-              onModeChange={(mode) =>
-                setConfig((prev) => ({ ...prev, mode }))
-              }
-              disabled={isMonitoring}
-            />
-
-            {error && (
-              <div className="text-terminal-danger text-sm bg-terminal-danger/10 border border-terminal-danger/30 rounded px-4 py-2">
-                {error}
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-terminal-border/50 pb-6">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-terminal-success to-terminal-warning flex items-center justify-center shadow-lg shadow-terminal-success/20">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-terminal-bg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
               </div>
-            )}
-
-            <div className="flex gap-3">
-              {!isMonitoring ? (
-                <button
-                  onClick={startMonitoring}
-                  disabled={isLoading || !config.tokenAddress}
-                  className="terminal-button-primary"
-                >
-                  {isLoading ? 'Loading...' : 'Start Monitoring'}
-                </button>
-              ) : (
-                <button
-                  onClick={stopMonitoring}
-                  className="terminal-button-danger"
-                >
-                  Stop
-                </button>
-              )}
+              <h1 className="text-3xl font-bold tracking-tight text-white">
+                Token<span className="text-terminal-success">Monitor</span>
+              </h1>
             </div>
+            <p className="text-terminal-muted text-sm md:text-base max-w-md">
+              Real-time Solana transaction tracker for Pump.fun and Raydium
+            </p>
+          </div>
+          
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-terminal-panel border border-terminal-border text-xs font-medium text-terminal-muted">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-terminal-success opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-terminal-success"></span>
+            </span>
+            System Online
           </div>
         </div>
 
-        {/* Status Bar */}
-        <StatusBar
-          isMonitoring={isMonitoring}
-          tokenAddress={config.tokenAddress}
-          stats={stats}
-        />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Control Panel */}
+          <div className="lg:col-span-1 space-y-6">
+            <div className="terminal-panel p-5 space-y-6 sticky top-6">
+              <div className="flex items-center gap-2 text-terminal-text font-semibold border-b border-terminal-border/50 pb-3">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-terminal-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                </svg>
+                Configuration
+              </div>
 
-        {/* Transaction Feed */}
-        <TransactionFeed 
-          transactions={transactions} 
-          onLoadMore={loadMore}
-          isLoadingMore={isLoadingMore}
-        />
+              <TokenInput
+                value={config.tokenAddress}
+                onChange={(address) =>
+                  setConfig((prev) => ({ ...prev, tokenAddress: address }))
+                }
+                disabled={isMonitoring}
+              />
+
+              <DateRangePicker
+                mode={config.mode}
+                onModeChange={(mode) =>
+                  setConfig((prev) => ({ ...prev, mode }))
+                }
+                disabled={isMonitoring}
+              />
+
+              {error && (
+                <div className="flex items-start gap-2 text-terminal-danger text-sm bg-terminal-danger/5 border border-terminal-danger/20 rounded-md p-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  {error}
+                </div>
+              )}
+
+              <div className="pt-2">
+                {!isMonitoring ? (
+                  <button
+                    onClick={startMonitoring}
+                    disabled={isLoading || !config.tokenAddress}
+                    className="w-full terminal-button-primary flex items-center justify-center gap-2 py-3 shadow-lg shadow-terminal-success/20 hover:shadow-terminal-success/30 hover:-translate-y-0.5 transition-all"
+                  >
+                    {isLoading ? (
+                      <>
+                        <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Initializing...
+                      </>
+                    ) : (
+                      <>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Start Monitoring
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    onClick={stopMonitoring}
+                    className="w-full terminal-button-danger flex items-center justify-center gap-2 py-3 shadow-lg shadow-terminal-danger/20 hover:shadow-terminal-danger/30 hover:-translate-y-0.5 transition-all"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                    </svg>
+                    Stop Monitoring
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Main Content */}
+          <div className="lg:col-span-2 space-y-6">
+            <StatusBar
+              isMonitoring={isMonitoring}
+              tokenAddress={config.tokenAddress}
+              stats={stats}
+            />
+
+            <TransactionFeed 
+              transactions={transactions} 
+              onLoadMore={loadMore}
+              isLoadingMore={isLoadingMore}
+            />
+          </div>
+        </div>
       </div>
     </main>
   );
