@@ -1,4 +1,4 @@
-import { Transaction, HeliusTransaction } from '@/types';
+import { Transaction, HeliusTransaction } from '../types';
 
 export class TransactionParser {
   static parse(heliusTx: HeliusTransaction, tokenMint: string): Transaction | null {

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { HeliusTransaction } from '@/types';
+import { HeliusTransaction } from '../types';
 
 export class HeliusService {
   private apiKey: string;
