@@ -53,8 +53,8 @@ export async function GET(req: NextRequest) {
       // Initial poll
       await poll();
 
-      // Poll every 3 seconds
-      const interval = setInterval(poll, 3000);
+      // Poll every 1 second (reduced from 3s for lower latency)
+      const interval = setInterval(poll, 1000);
 
       // Clean up on disconnect
       req.signal.addEventListener('abort', () => {

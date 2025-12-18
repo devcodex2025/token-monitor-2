@@ -97,7 +97,38 @@ export class TransactionParser {
       let solAmount = 0;
       let displayToken = 'SOL';
       
-      if (nativeTransfers && nativeTransfers.length > 0) {
+      // Check for WSOL, USDC, USDT in token transfers
+      const WSOL_MINT = 'So11111111111111111111111111111111111111112';
+      const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+      const USDT_MINT = 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB';
+
+      if (tokenTransfers && tokenTransfers.length > 0) {
+        for (const transfer of tokenTransfers) {
+          // Skip the main token transfer
+          if (transfer.mint === tokenMint) continue;
+
+          // Check if this transfer involves the user
+          const isRelevant = 
+            (isBuy && transfer.fromUserAccount === actualWallet) || // User paying with Quote
+            (!isBuy && transfer.toUserAccount === actualWallet);    // User receiving Quote
+
+          if (isRelevant) {
+            if (transfer.mint === WSOL_MINT) {
+              solAmount += transfer.tokenAmount;
+              displayToken = 'SOL';
+            } else if (transfer.mint === USDC_MINT) {
+              solAmount += transfer.tokenAmount; // Keep as is, but label as USDC
+              displayToken = 'USDC';
+            } else if (transfer.mint === USDT_MINT) {
+              solAmount += transfer.tokenAmount; // Keep as is, but label as USDT
+              displayToken = 'USDT';
+            }
+          }
+        }
+      }
+
+      // If no quote token found in token transfers, check native SOL
+      if (solAmount === 0 && nativeTransfers && nativeTransfers.length > 0) {
         // For BUY: user sends SOL (fromUserAccount)
         // For SELL: user receives SOL (toUserAccount)
         const relevantTransfer = nativeTransfers.find(
@@ -111,7 +142,7 @@ export class TransactionParser {
         );
         
         if (relevantTransfer) {
-          solAmount = relevantTransfer.amount;
+          solAmount = relevantTransfer.amount / 1e9;
         } else {
           // Fallback: find any SOL transfer related to this wallet
           const anyTransfer = nativeTransfers.find(
@@ -119,7 +150,7 @@ export class TransactionParser {
               transfer.fromUserAccount === actualWallet || transfer.toUserAccount === actualWallet
           );
           if (anyTransfer) {
-            solAmount = anyTransfer.amount;
+            solAmount = anyTransfer.amount / 1e9;
           }
         }
       }
@@ -155,6 +186,7 @@ export class TransactionParser {
           'boop8hVGQGqehUK2iVEMEnMrL5RbjywRzHKBmBE7ry4': 'Boop.fun',
           '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P': 'Pump.fun',
           'MoonCVVNZFSYkqN5438hi3fulh6Nj59sbpxmaxhY9Q': 'Moonshot',
+          'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA': 'Pump.fun AMM',
         };
 
         for (const acc of accountData) {

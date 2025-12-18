@@ -31,6 +31,16 @@ const DEX_INFO: Record<string, { name: string; logo?: string; color?: string }> 
     logo: 'https://pump.fun/logo.png',
     color: '#10b981' // emerald-500
   },
+  'PUMP.FUN AMM': { 
+    name: 'Pump.fun AMM', 
+    logo: 'https://pump.fun/logo.png',
+    color: '#10b981' // emerald-500
+  },
+  'PUMP_FUN_AMM': { 
+    name: 'Pump.fun AMM', 
+    logo: 'https://pump.fun/logo.png',
+    color: '#10b981' // emerald-500
+  },
   'MOONSHOT': { 
     name: 'Moonshot', 
     color: '#8b5cf6' // violet-500
@@ -115,6 +125,16 @@ export default function TransactionFeed({ transactions, onLoadMore, isLoadingMor
           {sortedTransactions.length} transactions
         </div>
       </div>
+
+      {/* Table Header */}
+      <div className="flex items-center gap-4 px-4 py-2 bg-terminal-surface/50 border-b border-terminal-border text-xs font-medium text-terminal-muted uppercase tracking-wider">
+        <div className="w-20">Time</div>
+        <div className="w-16">Type</div>
+        <div className="w-24">DEX</div>
+        <div className="w-20 hidden md:block">TX ID</div>
+        <div className="flex-1">Wallet</div>
+        <div className="text-right w-32">Amount</div>
+      </div>
       
       <div className="flex-1 overflow-y-auto">
         {sortedTransactions.map((tx) => (
@@ -155,69 +175,82 @@ function TransactionRow({ transaction }: { transaction: Transaction }) {
         isBuy ? 'transaction-buy' : 'transaction-sell'
       }`}
     >
-      <div className="flex items-center gap-4 flex-1">
+      <div className="flex items-center gap-4 flex-1 px-4">
         {/* Time */}
         <div 
-          className="text-xs text-terminal-muted font-mono w-20 cursor-help"
-          title={formatDateTime(transaction.blockTime)}
+          className="text-xs text-terminal-muted font-mono w-20 flex-shrink-0 cursor-default group relative"
         >
-          {timeAgoStr}
+          <span className="border-b border-dotted border-terminal-muted/50">{timeAgoStr}</span>
+          
+          {/* Tooltip */}
+          <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50">
+            <div className="bg-terminal-panel border border-terminal-border text-terminal-text text-xs px-2 py-1 rounded shadow-lg whitespace-nowrap">
+              {formatDateTime(transaction.blockTime)}
+            </div>
+          </div>
         </div>
 
         {/* Type Badge */}
-        <div
-          className={`px-3 py-1 rounded text-xs font-bold ${
-            isBuy
-              ? 'bg-terminal-success/20 text-terminal-success'
-              : 'bg-terminal-danger/20 text-terminal-danger'
-          }`}
-        >
-          {isBuy ? '🟢 BUY' : '🔴 SELL'}
+        <div className="w-16 flex-shrink-0">
+          <div
+            className={`inline-flex px-2 py-1 rounded text-xs font-bold ${
+              isBuy
+                ? 'bg-terminal-success/20 text-terminal-success'
+                : 'bg-terminal-danger/20 text-terminal-danger'
+            }`}
+          >
+            {isBuy ? 'BUY' : 'SELL'}
+          </div>
         </div>
 
         {/* DEX Badge */}
-        {transaction.dex && <DexBadge dex={transaction.dex} />}
+        <div className="w-24 flex-shrink-0 overflow-hidden">
+          {transaction.dex ? <DexBadge dex={transaction.dex} /> : <span className="text-xs text-terminal-muted">-</span>}
+        </div>
+
+        {/* Transaction ID */}
+        <div className="font-mono text-xs text-terminal-muted hidden md:block w-20 flex-shrink-0" title={transaction.signature}>
+          {shortenAddress(transaction.signature, 4)}
+        </div>
 
         {/* Wallet */}
-        <div className="font-mono text-sm text-terminal-text/80">
+        <div className="font-mono text-sm text-terminal-text/80 flex-1 min-w-0 truncate">
           {shortenAddress(transaction.wallet)}
         </div>
 
         {/* Amount */}
-        <div className="ml-auto flex items-center gap-6">
-          <div className="text-right">
-            <div className="text-sm font-medium">
-              {formatSolAmount(transaction.solAmount)} {transaction.displayToken || 'SOL'}
-            </div>
-            <div className="text-xs text-terminal-muted">
-              {transaction.tokenAmount.toLocaleString()} tokens
-            </div>
+        <div className="w-32 flex-shrink-0 text-right">
+          <div className="text-sm font-medium">
+            {formatSolAmount(transaction.solAmount)} {transaction.displayToken || 'SOL'}
           </div>
-
-          {/* Link to explorer */}
-          <a
-            href={`https://solscan.io/tx/${transaction.signature}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-terminal-warning hover:text-terminal-warning/80 transition-colors"
-            title="View on Solscan"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-              />
-            </svg>
-          </a>
+          <div className="text-xs text-terminal-muted">
+            {transaction.tokenAmount.toLocaleString('en-US')} tokens
+          </div>
         </div>
+
+        {/* Link to explorer */}
+        <a
+          href={`https://solscan.io/tx/${transaction.signature}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-terminal-warning hover:text-terminal-warning/80 transition-colors ml-2 flex-shrink-0"
+          title="View on Solscan"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+            />
+          </svg>
+        </a>
       </div>
     </div>
   );

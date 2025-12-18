@@ -9,12 +9,14 @@ interface StatusBarProps {
     total: number;
     buys: number;
     sells: number;
+    buyVolumeSOL: number;
+    sellVolumeToken: number;
   };
 }
 
 export default function StatusBar({ isMonitoring, tokenAddress, stats }: StatusBarProps) {
   return (
-    <div className="terminal-panel p-4 mb-6">
+    <div className="p-4">
       <div className="flex items-center justify-between flex-wrap gap-4">
         {/* Status */}
         <div className="flex items-center gap-3">
@@ -40,7 +42,7 @@ export default function StatusBar({ isMonitoring, tokenAddress, stats }: StatusB
 
         {/* Stats */}
         {stats.total > 0 && (
-          <div className="flex items-center gap-6 text-sm">
+          <div className="flex items-center gap-6 text-sm flex-wrap">
             <div>
               <span className="text-terminal-muted">Total:</span>{' '}
               <span className="font-semibold">{stats.total}</span>
@@ -53,16 +55,14 @@ export default function StatusBar({ isMonitoring, tokenAddress, stats }: StatusB
               <span className="text-terminal-danger">Sells:</span>{' '}
               <span className="font-semibold">{stats.sells}</span>
             </div>
+            <div className="hidden md:block w-px h-4 bg-terminal-border"></div>
             <div>
-              <span className="text-terminal-muted">Ratio:</span>{' '}
-              <span className="font-semibold">
-                {stats.total > 0
-                  ? ((stats.buys / stats.total) * 100).toFixed(1)
-                  : 0}
-                % / {stats.total > 0
-                  ? ((stats.sells / stats.total) * 100).toFixed(1)
-                  : 0}%
-              </span>
+              <span className="text-terminal-muted">Buy Vol:</span>{' '}
+              <span className="font-semibold text-terminal-success">{stats.buyVolumeSOL.toFixed(2)} SOL</span>
+            </div>
+            <div>
+              <span className="text-terminal-muted">Sell Vol:</span>{' '}
+              <span className="font-semibold text-terminal-danger">{stats.sellVolumeToken.toLocaleString(undefined, { maximumFractionDigits: 0 })} Tokens</span>
             </div>
           </div>
         )}

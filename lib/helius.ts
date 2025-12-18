@@ -14,7 +14,7 @@ export class HeliusService {
   ): Promise<HeliusTransaction[]> {
     try {
       const limit = options.limit || 100;
-      let url = `https://api-mainnet.helius-rpc.com/v0/addresses/${tokenAddress}/transactions?api-key=${this.apiKey}&limit=${limit}`;
+      let url = `https://api-mainnet.helius-rpc.com/v0/addresses/${tokenAddress}/transactions?api-key=${this.apiKey}&limit=${limit}&commitment=confirmed`;
       
       if (options.before) {
         url += `&before=${options.before}`;

@@ -13,12 +13,12 @@ export const shortenAddress = (address: string, chars = 4): string => {
   return `${address.slice(0, chars)}...${address.slice(-chars)}`;
 };
 
-export const formatSolAmount = (lamports: number): string => {
-  return (lamports / 1e9).toFixed(4);
+export const formatSolAmount = (amount: number): string => {
+  return amount.toFixed(4);
 };
 
 export const formatTokenAmount = (amount: number, decimals: number = 6): string => {
-  return (amount / Math.pow(10, decimals)).toLocaleString(undefined, {
+  return (amount / Math.pow(10, decimals)).toLocaleString('en-US', {
     maximumFractionDigits: 2,
   });
 };

@@ -7,6 +7,7 @@ import DateRangePicker from '@/components/DateRangePicker';
 import TransactionFeed from '@/components/TransactionFeed';
 import StatusBar from '@/components/StatusBar';
 import { Transaction, TokenMonitorConfig } from '@/types';
+import Image from 'next/image';
 
 export default function Home() {
   const [config, setConfig] = useState<TokenMonitorConfig>({
@@ -18,9 +19,16 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [stats, setStats] = useState({ total: 0, buys: 0, sells: 0 });
-  
+  const [stats, setStats] = useState({ 
+    total: 0, 
+    buys: 0, 
+    sells: 0,
+    buyVolumeSOL: 0,
+    sellVolumeToken: 0
+  });
+
   const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load saved token address from localStorage on mount
   useEffect(() => {
@@ -55,7 +63,7 @@ export default function Home() {
         });
 
         if (!response.ok) throw new Error('Failed to fetch transactions');
-        
+
         const data = await response.json();
         setTransactions(data.transactions || []);
       }
@@ -86,10 +94,10 @@ export default function Home() {
       });
 
       if (!response.ok) throw new Error('Failed to fetch more transactions');
-      
+
       const data = await response.json();
       const newTransactions = data.transactions || [];
-      
+
       if (newTransactions.length > 0) {
         setTransactions((prev) => [...prev, ...newTransactions]);
       }
@@ -105,36 +113,60 @@ export default function Home() {
       wsRef.current.close();
       wsRef.current = null;
     }
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
     setIsMonitoring(false);
   };
 
   const connectWebSocket = () => {
+    // Clear any pending reconnect
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
     // Use Server-Sent Events for Vercel compatibility
     const eventSource = new EventSource(`/api/stream?token=${encodeURIComponent(config.tokenAddress)}`);
-    
+
     eventSource.onopen = () => {
       console.log('SSE connected');
+      setError(null); // Clear error on successful connection
     };
 
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      
+
       if (data.type === 'transaction') {
         const newTx = data.transaction as Transaction;
         setTransactions((prev) => {
+          // Check if transaction already exists to avoid duplicates
+          if (prev.some(tx => tx.signature === newTx.signature)) {
+            return prev;
+          }
           const updated = [newTx, ...prev];
-          // Keep max 500 transactions
-          return updated.slice(0, 500);
+          // Keep max 2000 transactions to allow for history loading
+          return updated.slice(0, 2000);
         });
       } else if (data.type === 'error') {
-        setError(data.message);
+        // Don't stop monitoring on error, just show it
+        console.error('Stream error:', data.message);
       }
     };
 
     eventSource.onerror = (error) => {
       console.error('SSE error:', error);
       eventSource.close();
-      setError('Connection error');
+      
+      // Only reconnect if we are supposed to be monitoring
+      // We check the ref or state. Since this closure captures state, we need to be careful.
+      // However, if stopMonitoring is called, we clear the timeout.
+      
+      console.log('Attempting to reconnect in 3s...');
+      reconnectTimeoutRef.current = setTimeout(() => {
+        connectWebSocket();
+      }, 3000);
     };
 
     // Store as any to reuse wsRef
@@ -143,15 +175,37 @@ export default function Home() {
 
   useEffect(() => {
     // Calculate stats
-    const buys = transactions.filter((tx) => tx.type === 'BUY').length;
-    const sells = transactions.filter((tx) => tx.type === 'SELL').length;
-    setStats({ total: transactions.length, buys, sells });
+    const buys = transactions.filter((tx) => tx.type === 'BUY');
+    const sells = transactions.filter((tx) => tx.type === 'SELL');
+    
+    const buyVolumeSOL = buys.reduce((acc, tx) => {
+      // Include if displayToken is SOL, undefined, or null
+      // Also ensure solAmount is treated as a number
+      const isSol = tx.displayToken === 'SOL' || !tx.displayToken;
+      if (isSol) {
+        return acc + (Number(tx.solAmount) || 0);
+      }
+      return acc;
+    }, 0);
+
+    const sellVolumeToken = sells.reduce((acc, tx) => acc + (Number(tx.tokenAmount) || 0), 0);
+
+    setStats({ 
+      total: transactions.length, 
+      buys: buys.length, 
+      sells: sells.length,
+      buyVolumeSOL,
+      sellVolumeToken
+    });
   }, [transactions]);
 
   useEffect(() => {
     return () => {
       if (wsRef.current) {
         wsRef.current.close();
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
       }
     };
   }, []);
@@ -163,11 +217,15 @@ export default function Home() {
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-terminal-border/50 pb-6">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-terminal-success to-terminal-warning flex items-center justify-center shadow-lg shadow-terminal-success/20">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-terminal-bg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-              </div>
+
+              <Image
+                src="/pump-monitor-logo-opt.png"
+                alt="PumpMonitor Logo"
+                width={817}
+                height={418}
+                className="h-8 w-auto"
+              />
+
               <h1 className="text-3xl font-bold tracking-tight text-white">
                 Token<span className="text-terminal-success">Monitor</span>
               </h1>
@@ -176,7 +234,7 @@ export default function Home() {
               Real-time Solana transaction tracker for Pump.fun and Raydium
             </p>
           </div>
-          
+
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-terminal-panel border border-terminal-border text-xs font-medium text-terminal-muted">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-terminal-success opacity-75"></span>
@@ -264,17 +322,22 @@ export default function Home() {
           </div>
 
           {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-6 pb-24">
+            <TransactionFeed
+              transactions={transactions}
+              onLoadMore={loadMore}
+              isLoadingMore={isLoadingMore}
+            />
+          </div>
+        </div>
+
+        {/* Fixed Status Bar */}
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-terminal-bg border-t border-terminal-border shadow-lg shadow-black/50">
+          <div className="max-w-6xl mx-auto">
             <StatusBar
               isMonitoring={isMonitoring}
               tokenAddress={config.tokenAddress}
               stats={stats}
-            />
-
-            <TransactionFeed 
-              transactions={transactions} 
-              onLoadMore={loadMore}
-              isLoadingMore={isLoadingMore}
             />
           </div>
         </div>
