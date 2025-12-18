@@ -24,7 +24,8 @@ export default function Home() {
     buys: 0, 
     sells: 0,
     buyVolumeSOL: 0,
-    sellVolumeToken: 0
+    sellVolumeSOL: 0,
+    totalVolumeSOL: 0
   });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -188,14 +189,21 @@ export default function Home() {
       return acc;
     }, 0);
 
-    const sellVolumeToken = sells.reduce((acc, tx) => acc + (Number(tx.tokenAmount) || 0), 0);
+    const sellVolumeSOL = sells.reduce((acc, tx) => {
+      const isSol = tx.displayToken === 'SOL' || !tx.displayToken;
+      if (isSol) {
+        return acc + (Number(tx.solAmount) || 0);
+      }
+      return acc;
+    }, 0);
 
     setStats({ 
       total: transactions.length, 
       buys: buys.length, 
       sells: sells.length,
       buyVolumeSOL,
-      sellVolumeToken
+      sellVolumeSOL,
+      totalVolumeSOL: buyVolumeSOL + sellVolumeSOL
     });
   }, [transactions]);
 

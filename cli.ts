@@ -40,7 +40,7 @@ let stats = {
   buys: 0,
   sells: 0,
   buyVolumeSOL: 0,
-  sellVolumeToken: 0
+  sellVolumeSOL: 0
 };
 
 console.log('\x1b[36m%s\x1b[0m', '🚀 Starting Token Monitor CLI...');
@@ -56,27 +56,32 @@ function updateStats(tx: Transaction) {
     }
   } else {
     stats.sells++;
-    stats.sellVolumeToken += tx.tokenAmount;
+    if (tx.displayToken === 'SOL' || !tx.displayToken) {
+      stats.sellVolumeSOL += tx.solAmount;
+    }
   }
 }
 
 function printDashboard() {
-  // Clear screen and move cursor to top left
-  process.stdout.write('\x1b[2J\x1b[0f');
-
-  console.log('\x1b[36m%s\x1b[0m', '🚀 Token Monitor CLI');
-  console.log(`Target Token: ${tokenAddress}`);
-  console.log(`Last Update: ${new Date().toLocaleTimeString()}`);
-  console.log('-'.repeat(110));
+  // Build the entire output string first to avoid flicker
+  let output = '';
+  
+  // Clear screen, scrollback and move cursor to top left
+  output += '\x1b[2J\x1b[3J\x1b[H';
+  
+  // Header
+  output += '\x1b[36m🚀 Token Monitor CLI\x1b[0m\n';
+  output += `Target Token: ${tokenAddress}\n`;
+  output += `Last Update: ${new Date().toLocaleTimeString()}\n`;
+  output += '-'.repeat(110) + '\n';
   
   // Summary
-  console.log(`Total: ${stats.total} | Buys: \x1b[32m${stats.buys}\x1b[0m | Sells: \x1b[31m${stats.sells}\x1b[0m`);
-  console.log(`Buy Vol: \x1b[32m${stats.buyVolumeSOL.toFixed(2)} SOL\x1b[0m | Sell Vol: \x1b[31m${formatTokenAmount(stats.sellVolumeToken, 0)} Tokens\x1b[0m`);
-  console.log('-'.repeat(110));
+  output += `Total: ${stats.total} | Buys: \x1b[32m${stats.buys}\x1b[0m | Sells: \x1b[31m${stats.sells}\x1b[0m\n`;
+  output += `Buy Vol: \x1b[32m${stats.buyVolumeSOL.toFixed(2)} SOL\x1b[0m | Sell Vol: \x1b[31m${stats.sellVolumeSOL.toFixed(2)} SOL\x1b[0m | Total Vol: ${(stats.buyVolumeSOL + stats.sellVolumeSOL).toFixed(2)} SOL\n`;
+  output += '-'.repeat(110) + '\n';
 
   // Table Header
-  console.log(
-    '%s %s %s %s %s %s %s',
+  output += [
     'TYPE'.padEnd(6),
     'SOL AMOUNT'.padEnd(12),
     'TOKEN AMOUNT'.padEnd(15),
@@ -84,8 +89,8 @@ function printDashboard() {
     'TX ID'.padEnd(10),
     'DEX'.padEnd(15),
     'DATE/TIME'
-  );
-  console.log('-'.repeat(110));
+  ].join(' ') + '\n';
+  output += '-'.repeat(110) + '\n';
 
   // Print last 20 transactions (newest first)
   const displayTxs = allTransactions.slice(0, 20);
@@ -112,8 +117,7 @@ function printDashboard() {
     const txId = shortenAddress(parsed.signature, 4).padEnd(10);
     const dex = (parsed.dex || 'Unknown').padEnd(15);
 
-    console.log(
-      '%s %s %s %s %s %s %s',
+    output += [
       type.padEnd(15), // Extra padding for color codes
       sol,
       tokens,
@@ -121,8 +125,11 @@ function printDashboard() {
       txId,
       dex,
       time
-    );
+    ].join(' ') + '\n';
   }
+
+  // Print buffer
+  process.stdout.write(output);
 }
 
 async function poll() {

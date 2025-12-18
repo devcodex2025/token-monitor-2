@@ -10,7 +10,8 @@ interface StatusBarProps {
     buys: number;
     sells: number;
     buyVolumeSOL: number;
-    sellVolumeToken: number;
+    sellVolumeSOL: number;
+    totalVolumeSOL: number;
   };
 }
 
@@ -62,7 +63,12 @@ export default function StatusBar({ isMonitoring, tokenAddress, stats }: StatusB
             </div>
             <div>
               <span className="text-terminal-muted">Sell Vol:</span>{' '}
-              <span className="font-semibold text-terminal-danger">{stats.sellVolumeToken.toLocaleString(undefined, { maximumFractionDigits: 0 })} Tokens</span>
+              <span className="font-semibold text-terminal-danger">{stats.sellVolumeSOL.toFixed(2)} SOL</span>
+            </div>
+            <div className="hidden md:block w-px h-4 bg-terminal-border"></div>
+            <div>
+              <span className="text-terminal-muted">Total Vol:</span>{' '}
+              <span className="font-semibold text-terminal-text">{stats.totalVolumeSOL.toFixed(2)} SOL</span>
             </div>
           </div>
         )}
