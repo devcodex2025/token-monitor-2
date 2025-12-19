@@ -119,6 +119,7 @@ export class TransactionParser {
       let wsolAmount = 0;
 
       if (tokenTransfers && tokenTransfers.length > 0) {
+        // First pass: look for transfers directly involving the user's wallet
         for (const transfer of tokenTransfers) {
           // Skip the main token transfer
           if (transfer.mint === tokenMint) continue;
@@ -139,24 +140,47 @@ export class TransactionParser {
           }
         }
         
-        // If no direct transfers found, look for any WSOL/USDC/USDT in the transaction
-        // This handles intermediary accounts (e.g., Meteora DLMM, Jupiter routing)
-        if (usdcAmount === 0 && usdtAmount === 0 && wsolAmount === 0) {
+        // Second pass: ALWAYS check for WSOL in the entire transaction
+        // This ensures we catch WSOL even if USDC was found in first pass
+        // (handles Jupiter routing: user pays USDC -> intermediate WSOL -> target token)
+        if (wsolAmount === 0) {
+          let maxWsol = 0;
+          
           for (const transfer of tokenTransfers) {
             if (transfer.mint === tokenMint) continue;
             
             if (transfer.mint === WSOL_MINT) {
-              wsolAmount += transfer.tokenAmount;
-            } else if (transfer.mint === USDC_MINT) {
-              usdcAmount += transfer.tokenAmount;
-            } else if (transfer.mint === USDT_MINT) {
-              usdtAmount += transfer.tokenAmount;
+              maxWsol = Math.max(maxWsol, transfer.tokenAmount);
             }
           }
+          
+          if (maxWsol > 0) {
+            wsolAmount = maxWsol;
+          }
+        }
+        
+        // Third pass: if still no amounts found, look for any USDC/USDT
+        if (usdcAmount === 0 && usdtAmount === 0 && wsolAmount === 0) {
+          let maxUsdc = 0;
+          let maxUsdt = 0;
+          
+          for (const transfer of tokenTransfers) {
+            if (transfer.mint === tokenMint) continue;
+            
+            if (transfer.mint === USDC_MINT) {
+              maxUsdc = Math.max(maxUsdc, transfer.tokenAmount);
+            } else if (transfer.mint === USDT_MINT) {
+              maxUsdt = Math.max(maxUsdt, transfer.tokenAmount);
+            }
+          }
+          
+          usdcAmount = maxUsdc;
+          usdtAmount = maxUsdt;
         }
       }
 
-      // Standardize to SOL: prioritize WSOL, but keep USDC/USDT as reference
+      // Prioritize WSOL/SOL over stablecoins - SOL is the primary trading pair on Solana
+      // USDC/USDT shown only when there's absolutely no SOL/WSOL in the transaction
       if (wsolAmount > 0) {
         // Use WSOL as primary display (standardized in SOL)
         solAmount = wsolAmount;
