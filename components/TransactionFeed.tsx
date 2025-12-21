@@ -177,6 +177,7 @@ function TransactionRow({ transaction }: { transaction: Transaction }) {
   const isSell = transaction.type === 'SELL';
   const isRemoveLiquidity = transaction.type === 'REMOVE_LIQUIDITY';
   const isClaimFees = transaction.type === 'CLAIM_FEES';
+  const isAddLiquidity = transaction.type === 'ADD_LIQUIDITY';
   const [timeAgoStr, setTimeAgoStr] = useState(timeAgo(transaction.blockTime));
 
   // Update time ago every second
@@ -218,6 +219,8 @@ function TransactionRow({ transaction }: { transaction: Transaction }) {
                 ? 'bg-terminal-danger/20 text-terminal-danger'
                 : isClaimFees
                 ? 'bg-yellow-500/20 text-yellow-400'
+                : isAddLiquidity
+                ? 'bg-green-500/20 text-green-400'
                 : 'bg-purple-500/20 text-purple-400'
             }`}
           >
@@ -225,6 +228,11 @@ function TransactionRow({ transaction }: { transaction: Transaction }) {
               <span className="flex items-center gap-1">
                 <span>💰</span>
                 <span>FEES</span>
+              </span>
+            ) : isAddLiquidity ? (
+              <span className="flex items-center gap-1">
+                <span>💧</span>
+                <span>+LP</span>
               </span>
             ) : isRemoveLiquidity ? (
               <span className="flex items-center gap-1">
@@ -260,15 +268,41 @@ function TransactionRow({ transaction }: { transaction: Transaction }) {
                 <span>🎁</span>
                 <span>(Claim Fees)</span>
               </span>
+            ) : isRemoveLiquidity || isClaimFees ? (
+              // Show both tokens for Remove Liquidity and Claim Fees (receiving)
+              <div className="flex flex-col items-end gap-0.5">
+                <div className="flex items-center gap-1">
+                  <span className="text-terminal-muted text-xs">+</span>
+                  <span>{formatSolAmount(transaction.solAmount)} SOL</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-terminal-muted text-xs">+</span>
+                  <span className="text-xs">{transaction.tokenAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })} tokens</span>
+                </div>
+              </div>
+            ) : isAddLiquidity ? (
+              // Show both tokens for Add Liquidity (sending)
+              <div className="flex flex-col items-end gap-0.5">
+                <div className="flex items-center gap-1">
+                  <span className="text-terminal-muted text-xs">-</span>
+                  <span>{formatSolAmount(transaction.solAmount)} SOL</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-terminal-muted text-xs">-</span>
+                  <span className="text-xs">{transaction.tokenAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })} tokens</span>
+                </div>
+              </div>
             ) : (
               <>
                 {formatSolAmount(transaction.solAmount)} {transaction.displayToken || 'SOL'}
               </>
             )}
           </div>
-          <div className="text-xs text-terminal-muted">
-            {transaction.tokenAmount.toLocaleString('en-US')} tokens
-          </div>
+          {!isRemoveLiquidity && !isClaimFees && !isAddLiquidity && (
+            <div className="text-xs text-terminal-muted">
+              {transaction.tokenAmount.toLocaleString('en-US')} tokens
+            </div>
+          )}
         </div>
 
         {/* Link to explorer */}

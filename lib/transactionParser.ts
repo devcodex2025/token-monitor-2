@@ -2,6 +2,35 @@ import { Transaction, HeliusTransaction } from '../types';
 
 export class TransactionParser {
 
+  static parseAddLiquidity(
+    heliusTx: HeliusTransaction,
+    tokenMint: string,
+    feePayer: string
+  ): Transaction | null {
+    const { signature, timestamp, tokenTransfers } = heliusTx;
+    const WSOL_MINT = 'So11111111111111111111111111111111111111112';
+
+    // Find the transfers going FROM user TO pool
+    const tokenTransfer = tokenTransfers?.find(t => t.mint === tokenMint && t.fromUserAccount === feePayer);
+    const wsolTransfer = tokenTransfers?.find(t => t.mint === WSOL_MINT && t.fromUserAccount === feePayer);
+
+    const tokenAmount = tokenTransfer?.tokenAmount || 0;
+    const solAmount = wsolTransfer?.tokenAmount || 0;
+
+    return {
+      id: signature,
+      signature,
+      type: 'ADD_LIQUIDITY',
+      wallet: feePayer || '',
+      tokenAmount,
+      solAmount,
+      timestamp,
+      blockTime: timestamp,
+      displayToken: 'SOL',
+      dex: 'Meteora',
+    };
+  }
+
   static parseClaimFees(
     heliusTx: HeliusTransaction,
     tokenMint: string,
@@ -127,6 +156,17 @@ export class TransactionParser {
         // Check if this is Claim Fees: ALL transfers go TO the user (user receives both tokens)
         const ourTokenTransfer = tokenTransfers?.find(t => t.mint === tokenMint);
         const wsolTransfer = tokenTransfers?.find(t => t.mint === 'So11111111111111111111111111111111111111112');
+        
+        // Add Liquidity: user SENDS both tokens TO pool (opposite of Remove Liquidity)
+        const isAddLiquidity = ourTokenTransfer && wsolTransfer &&
+          ourTokenTransfer.fromUserAccount === feePayer &&
+          wsolTransfer.fromUserAccount === feePayer &&
+          ourTokenTransfer.toUserAccount !== feePayer &&
+          wsolTransfer.toUserAccount !== feePayer;
+        
+        if (isAddLiquidity) {
+          return this.parseAddLiquidity(heliusTx, tokenMint, feePayer);
+        }
         
         // Claim Fees: user RECEIVES both our token AND WSOL
         const isClaimFees = ourTokenTransfer && wsolTransfer &&

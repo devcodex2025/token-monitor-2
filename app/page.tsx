@@ -191,7 +191,7 @@ export default function Home() {
   };
 
   useEffect(() => {
-    // Calculate stats
+    // Calculate stats - exclude liquidity and fee management transactions
     const buys = transactions.filter((tx) => tx.type === 'BUY');
     const sells = transactions.filter((tx) => tx.type === 'SELL');
     

@@ -89,4 +89,8 @@
   .transaction-claim {
     @apply border-l-4 border-yellow-500;
   }
+  
+  .transaction-add-lp {
+    @apply border-l-4 border-green-500;
+  }
 }

@@ -1,7 +1,7 @@
 export interface Transaction {
   id: string;
   signature: string;
-  type: 'BUY' | 'SELL' | 'REMOVE_LIQUIDITY' | 'CLAIM_FEES';
+  type: 'BUY' | 'SELL' | 'REMOVE_LIQUIDITY' | 'CLAIM_FEES' | 'ADD_LIQUIDITY';
   wallet: string;
   tokenAmount: number;
   solAmount: number;
