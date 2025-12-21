@@ -1,6 +1,7 @@
 const axios = require('axios');
 const fs = require('fs');
-require('dotenv').config({ path: '.env.local' });
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env.local') });
 
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
 const SIGNATURE = 'XYLDGTfHzKH8KhER3TVg5rsiKVLKJqh2Mpd8SohuzCHRmppyaKkXN7zMcLmP9QfVHq6EB26FHmQNywgHQvFwoVB';

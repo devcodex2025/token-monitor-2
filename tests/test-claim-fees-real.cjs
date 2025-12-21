@@ -1,6 +1,7 @@
 const fs = require('fs');
+const path = require('path');
 
-const tx = JSON.parse(fs.readFileSync('test-claim-fees-real.json'))[0];
+const tx = JSON.parse(fs.readFileSync(path.join(__dirname, 'test-claim-fees-real.json')))[0];
 const tokenMint = 'CSrwNk6B1DwWCHRMsaoDVUfD5bBMQCJPY72ZG3Nnpump';
 
 console.log('=== Real Claim Fees Transaction Analysis ===');

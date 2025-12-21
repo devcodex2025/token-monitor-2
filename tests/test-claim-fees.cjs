@@ -1,7 +1,8 @@
 const fs = require('fs');
+const path = require('path');
 
 // Load the transaction
-const transaction = JSON.parse(fs.readFileSync('helius-tx-XYLDGTfH.json', 'utf8'));
+const transaction = JSON.parse(fs.readFileSync(path.join(__dirname, 'helius-tx-XYLDGTfH.json'), 'utf8'));
 
 const tokenMint = 'CSrwNk6B1DwWCHRMsaoDVUfD5bBMQCJPY72ZG3Nnpump';
 const { signature, timestamp, tokenTransfers, nativeTransfers, accountData, type, feePayer, source } = transaction;

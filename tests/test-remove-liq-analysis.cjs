@@ -1,6 +1,7 @@
 const fs = require('fs');
+const path = require('path');
 
-const json = JSON.parse(fs.readFileSync('test-remove-liq-real.json'));
+const json = JSON.parse(fs.readFileSync(path.join(__dirname, 'test-remove-liq-real.json')));
 const tx = json[0];
 
 console.log('\n=== Remove Liquidity Transaction Analysis ===');

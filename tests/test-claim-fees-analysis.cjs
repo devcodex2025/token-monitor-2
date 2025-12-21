@@ -1,7 +1,8 @@
 const fs = require('fs');
+const path = require('path');
 
 // Read test claim fees transaction
-const json = JSON.parse(fs.readFileSync('test-claim-fees-tx.json', 'utf8'));
+const json = JSON.parse(fs.readFileSync(path.join(__dirname, 'test-claim-fees-tx.json'), 'utf8'));
 const tx = json[0];
 
 console.log('\n=== Claim Fees Transaction Analysis ===');

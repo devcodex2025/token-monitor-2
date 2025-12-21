@@ -2,10 +2,10 @@ const fs = require('fs');
 const path = require('path');
 
 // Import compiled TypeScript
-const { TransactionParser } = require('./.next/server/app/api/stream/route.js');
+const { TransactionParser } = require('../.next/server/app/api/stream/route.js');
 
 // Read test transaction
-const json = JSON.parse(fs.readFileSync('test-remove-liq.json', 'utf8'));
+const json = JSON.parse(fs.readFileSync(path.join(__dirname, 'test-remove-liq.json'), 'utf8'));
 const tx = json[0];
 
 const tokenMint = 'CSrwNk6B1DwWCHRMsaoDVUfD5bBMQCJPY72ZG3Nnpump';

@@ -1,7 +1,8 @@
 const fs = require('fs');
+const path = require('path');
 
 // Read test transaction
-const json = JSON.parse(fs.readFileSync('test-remove-liq.json', 'utf8'));
+const json = JSON.parse(fs.readFileSync(path.join(__dirname, 'test-remove-liq.json'), 'utf8'));
 const tx = json[0]; // Changed from json.value[0]
 
 console.log('\n=== Transaction Analysis ===');

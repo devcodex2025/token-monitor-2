@@ -7,15 +7,29 @@ export class TransactionParser {
     tokenMint: string,
     feePayer: string
   ): Transaction | null {
-    const { signature, timestamp, tokenTransfers } = heliusTx;
+    const { signature, timestamp, tokenTransfers, nativeTransfers } = heliusTx;
     const WSOL_MINT = 'So11111111111111111111111111111111111111112';
 
     // Find the transfers going FROM user TO pool
     const tokenTransfer = tokenTransfers?.find(t => t.mint === tokenMint && t.fromUserAccount === feePayer);
     const wsolTransfer = tokenTransfers?.find(t => t.mint === WSOL_MINT && t.fromUserAccount === feePayer);
 
-    const tokenAmount = tokenTransfer?.tokenAmount || 0;
-    const solAmount = wsolTransfer?.tokenAmount || 0;
+    let tokenAmount = tokenTransfer?.tokenAmount || 0;
+    let solAmount = wsolTransfer?.tokenAmount || 0;
+
+    // Check Native Transfers (SOL)
+    if (nativeTransfers) {
+      for (const transfer of nativeTransfers) {
+        if (transfer.fromUserAccount === feePayer) {
+          // Native transfers are in lamports, convert to SOL
+          // Note: User might send multiple native transfers (e.g. to WSOL account, to Fee account)
+          // We should probably sum them up, or try to identify the one to the pool?
+          // For simplicity, let's sum all native transfers FROM user that are large enough to be liquidity?
+          // Or just sum all.
+          solAmount += transfer.amount / 1e9;
+        }
+      }
+    }
 
     return {
       id: signature,
@@ -200,51 +214,70 @@ export class TransactionParser {
 
       // If this is a Meteora transaction, check what type it is
       if (meteoraInstructions && meteoraInstructions.length > 0) {
-        // Check if this is Claim Fees: ALL transfers go TO the user (user receives both tokens)
-        const ourTokenTransfer = tokenTransfers?.find(t => t.mint === tokenMint);
-        const wsolTransfers = tokenTransfers?.filter(t => t.mint === 'So11111111111111111111111111111111111111112') || [];
+        const WSOL_MINT = 'So11111111111111111111111111111111111111112';
         
-        // Add Liquidity: user SENDS both tokens TO pool (opposite of Remove Liquidity)
-        const isAddLiquidity = ourTokenTransfer && wsolTransfers.length > 0 &&
-          ourTokenTransfer.fromUserAccount === feePayer &&
-          wsolTransfers.every(w => w.fromUserAccount === feePayer) &&
-          ourTokenTransfer.toUserAccount !== feePayer &&
-          wsolTransfers.every(w => w.toUserAccount !== feePayer);
+        // 1. Analyze Flow: Calculate Net Flow for Token and SOL
+        let netTokenAmount = 0;
+        let netSolAmount = 0;
+
+        // Check Token Transfers
+        tokenTransfers?.forEach(t => {
+          if (t.mint === tokenMint) {
+            if (t.fromUserAccount === feePayer) netTokenAmount -= t.tokenAmount;
+            if (t.toUserAccount === feePayer) netTokenAmount += t.tokenAmount;
+          } else if (t.mint === WSOL_MINT) {
+            if (t.fromUserAccount === feePayer) netSolAmount -= t.tokenAmount;
+            if (t.toUserAccount === feePayer) netSolAmount += t.tokenAmount;
+          }
+        });
+
+        // Check Native Transfers
+        nativeTransfers?.forEach(t => {
+          if (t.fromUserAccount === feePayer) netSolAmount -= t.amount / 1e9;
+          if (t.toUserAccount === feePayer) netSolAmount += t.amount / 1e9;
+        });
+
+        // 2. Determine Type based on Net Flow
+        // Positive = User Received
+        // Negative = User Sent
+
+        const isTokenPositive = netTokenAmount > 0;
+        const isTokenNegative = netTokenAmount < 0;
+        const isSolPositive = netSolAmount > 0;
+        const isSolNegative = netSolAmount < 0;
+
+        // REMOVE LIQUIDITY or CLAIM FEES: User receives assets (Token and/or SOL)
+        // Condition: Net Token >= 0 AND Net SOL >= 0 (and at least one is positive)
+        // We use a small epsilon for float comparison to avoid dust issues, but generally 0 is fine.
+        if ((netTokenAmount >= 0 && netSolAmount >= 0) && (netTokenAmount > 0 || netSolAmount > 0)) {
+           // Distinguish Claim Fees vs Remove Liquidity
+           // Use existing logic inside parseRemoveLiquidity/parseClaimFees to refine
+           
+           // Check strict Claim Fees pattern first (exactly 2 transfers)
+           const transfersToUser = tokenTransfers?.filter(t => t.toUserAccount === feePayer) || [];
+           const ourTokenTransfer = tokenTransfers?.find(t => t.mint === tokenMint);
+           const wsolTransfers = tokenTransfers?.filter(t => t.mint === WSOL_MINT) || [];
+           
+           const isStrictClaimFees = transfersToUser.length === 2 && 
+            ourTokenTransfer && wsolTransfers.length === 1 &&
+            ourTokenTransfer.toUserAccount === feePayer &&
+            wsolTransfers[0].toUserAccount === feePayer;
+
+           if (isStrictClaimFees) {
+             return this.parseClaimFees(heliusTx, tokenMint, feePayer);
+           }
+           
+           return this.parseRemoveLiquidity(heliusTx, tokenMint, null, feePayer);
+        }
         
-        if (isAddLiquidity) {
+        // ADD LIQUIDITY: User sends assets (Token and/or SOL)
+        // Condition: Net Token <= 0 AND Net SOL <= 0 (and at least one is negative)
+        else if ((netTokenAmount <= 0 && netSolAmount <= 0) && (netTokenAmount < 0 || netSolAmount < 0)) {
           return this.parseAddLiquidity(heliusTx, tokenMint, feePayer);
         }
-        
-        // Claim Fees: exactly 2 transfers TO user (1 WSOL + 1 our token), NOT combined with liquidity
-        const transfersToUser = tokenTransfers?.filter(t => t.toUserAccount === feePayer) || [];
-        const isClaimFees = transfersToUser.length === 2 && // Exactly 2, not more
-          ourTokenTransfer && wsolTransfers.length === 1 &&
-          ourTokenTransfer.toUserAccount === feePayer &&
-          wsolTransfers[0].toUserAccount === feePayer &&
-          ourTokenTransfer.fromUserAccount !== feePayer &&
-          wsolTransfers[0].fromUserAccount !== feePayer;
-        
-        if (isClaimFees) {
-          return this.parseClaimFees(heliusTx, tokenMint, feePayer);
-        }
-        
-        // Remove Liquidity: user RECEIVES tokens but also might SEND LP tokens
-        // Check if this is Remove Liquidity by looking at innerInstructions
-        for (const meteoraIx of meteoraInstructions) {
-          if (meteoraIx.innerInstructions && meteoraIx.innerInstructions.length > 0) {
-            for (const inner of meteoraIx.innerInstructions) {
-              // Check if this inner instruction involves our token mint
-              if (inner.accounts && inner.accounts.includes(tokenMint)) {
-                // Double-check: if both tokens go TO user from non-user, it's Claim Fees
-                if (isClaimFees) {
-                  return this.parseClaimFees(heliusTx, tokenMint, feePayer);
-                }
-                // Otherwise it's Remove Liquidity
-                return this.parseRemoveLiquidity(heliusTx, tokenMint, null, feePayer);
-              }
-            }
-          }
-        }
+
+        // SWAP: Mixed signs (User sends one, receives other)
+        // Fall through to standard BUY/SELL logic
       }
 
       if (!tokenTransfers || tokenTransfers.length === 0) {
@@ -261,9 +294,10 @@ export class TransactionParser {
       }
 
       // Check if this is a Remove Liquidity transaction (legacy check for standard transfers)
+      // Removed accounts.length check as it was misclassifying Swaps
       const isRemoveLiquidity = instructions?.some((ix: any) => 
         ix.programId === METEORA_DLMM && 
-        (ix.data?.includes('remove_liquidity') || ix.accounts?.length > 10)
+        ix.data?.includes('remove_liquidity')
       );
 
       if (isRemoveLiquidity) {
