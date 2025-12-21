@@ -53,6 +53,11 @@ export class HeliusService {
     }
   }
 
+  // Alias for getEnhancedTransaction
+  async getTransactionBySignature(signature: string): Promise<HeliusTransaction | null> {
+    return this.getEnhancedTransaction(signature);
+  }
+
   async parseWebhookData(data: any): Promise<HeliusTransaction[]> {
     // Parse webhook data from Helius
     return Array.isArray(data) ? data : [data];

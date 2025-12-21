@@ -2,9 +2,51 @@ import { Transaction, HeliusTransaction } from '../types';
 
 export class TransactionParser {
 
+  static parseRemoveLiquidity(
+    heliusTx: HeliusTransaction,
+    tokenMint: string,
+    tokenTransfer: any,
+    feePayer: string
+  ): Transaction | null {
+    const { signature, timestamp } = heliusTx;
+    const WSOL_MINT = 'So11111111111111111111111111111111111111112';
+
+    // Find transfers going TO the user (receiving tokens back)
+    let solAmount = 0;
+    let tokenAmount = 0;
+    const tokenTransfers = heliusTx.tokenTransfers || [];
+    
+    for (const transfer of tokenTransfers) {
+      // Check if user is receiving (toUserAccount matches feePayer)
+      const isUserReceiving = transfer.toUserAccount === feePayer || 
+                              transfer.toTokenAccount === feePayer;
+      
+      if (isUserReceiving) {
+        if (transfer.mint === WSOL_MINT) {
+          solAmount += transfer.tokenAmount;
+        } else if (transfer.mint === tokenMint) {
+          tokenAmount += transfer.tokenAmount;
+        }
+      }
+    }
+
+    return {
+      id: signature,
+      signature,
+      type: 'REMOVE_LIQUIDITY',
+      wallet: feePayer || '',
+      tokenAmount,
+      solAmount,
+      timestamp,
+      blockTime: timestamp,
+      displayToken: 'SOL',
+      dex: 'Meteora',
+    };
+  }
+
   static parse(heliusTx: HeliusTransaction, tokenMint: string): Transaction | null {
     try {
-      const { signature, timestamp, tokenTransfers, nativeTransfers, accountData, type, feePayer, source } = heliusTx;
+      const { signature, timestamp, tokenTransfers, nativeTransfers, accountData, type, feePayer, source, instructions } = heliusTx;
 
       if (!tokenTransfers || tokenTransfers.length === 0) {
         return null;
@@ -17,6 +59,17 @@ export class TransactionParser {
 
       if (!tokenTransfer) {
         return null;
+      }
+
+      // Check if this is a Remove Liquidity transaction
+      const METEORA_DLMM = 'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo';
+      const isRemoveLiquidity = instructions?.some((ix: any) => 
+        ix.programId === METEORA_DLMM && 
+        (ix.data?.includes('remove_liquidity') || ix.accounts?.length > 10)
+      );
+
+      if (isRemoveLiquidity) {
+        return this.parseRemoveLiquidity(heliusTx, tokenMint, tokenTransfer, feePayer);
       }
 
       // Simple swap direction logic:

@@ -169,6 +169,8 @@ export default function TransactionFeed({ transactions, onLoadMore, isLoadingMor
 
 function TransactionRow({ transaction }: { transaction: Transaction }) {
   const isBuy = transaction.type === 'BUY';
+  const isSell = transaction.type === 'SELL';
+  const isRemoveLiquidity = transaction.type === 'REMOVE_LIQUIDITY';
   const [timeAgoStr, setTimeAgoStr] = useState(timeAgo(transaction.blockTime));
 
   // Update time ago every second
@@ -182,7 +184,7 @@ function TransactionRow({ transaction }: { transaction: Transaction }) {
   return (
     <div
       className={`transaction-row animate-slide-in ${
-        isBuy ? 'transaction-buy' : 'transaction-sell'
+        isBuy ? 'transaction-buy' : isSell ? 'transaction-sell' : 'transaction-remove'
       }`}
     >
       <div className="flex items-center gap-4 flex-1 px-4">
@@ -206,10 +208,19 @@ function TransactionRow({ transaction }: { transaction: Transaction }) {
             className={`inline-flex px-2 py-1 rounded text-xs font-bold ${
               isBuy
                 ? 'bg-terminal-success/20 text-terminal-success'
-                : 'bg-terminal-danger/20 text-terminal-danger'
+                : isSell
+                ? 'bg-terminal-danger/20 text-terminal-danger'
+                : 'bg-purple-500/20 text-purple-400'
             }`}
           >
-            {isBuy ? 'BUY' : 'SELL'}
+            {isRemoveLiquidity ? (
+              <span className="flex items-center gap-1">
+                <span>💧</span>
+                <span>-LP</span>
+              </span>
+            ) : (
+              isBuy ? 'BUY' : 'SELL'
+            )}
           </div>
         </div>
 

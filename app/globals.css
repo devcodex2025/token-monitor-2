@@ -81,4 +81,8 @@
   .transaction-sell {
     @apply border-l-4 border-terminal-danger;
   }
+  
+  .transaction-remove {
+    @apply border-l-4 border-purple-500;
+  }
 }

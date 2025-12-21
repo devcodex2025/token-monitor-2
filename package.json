@@ -10,6 +10,7 @@
     "start": "next start",
     "start:server": "NODE_ENV=production tsx server.ts",
     "cli": "tsx cli.ts",
+    "webhook": "tsx lib/webhookManager.ts",
     "lint": "next lint"
   },
   "dependencies": {

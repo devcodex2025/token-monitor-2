@@ -142,9 +142,14 @@ export default function Home() {
       if (data.type === 'transaction') {
         const newTx = data.transaction as Transaction;
         
-        // Log timing information for latency monitoring
+        // Log transaction with source
+        const source = data._source || 'unknown';
+        const emoji = source === 'webhook' ? '🎯' : source === 'websocket' ? '⚡' : '📊';
+        
         if (data._timing) {
-          console.log(`⏱️ Latency: API ${data._timing.api}ms | Parse ${data._timing.parse}ms | Total ${data._timing.total}ms`);
+          console.log(`${emoji} ${source.toUpperCase()}: Receive ${data._timing.receive}ms | Parse ${data._timing.parse}ms | Total ${data._timing.total}ms`);
+        } else {
+          console.log(`${emoji} Transaction received via ${source}`);
         }
         
         setTransactions((prev) => {
@@ -156,9 +161,14 @@ export default function Home() {
           // Keep max 2000 transactions to allow for history loading
           return updated.slice(0, 2000);
         });
+      } else if (data.type === 'connected') {
+        console.log(`✅ ${data.message} - ${data.tokenAddress}`);
+      } else if (data.type === 'connecting') {
+        console.log(`🔌 ${data.message}`);
+      } else if (data.type === 'heartbeat') {
+        // Heartbeat to keep connection alive (silent)
       } else if (data.type === 'error') {
-        // Don't stop monitoring on error, just show it
-        console.error('Stream error:', data.message);
+        console.error('❌ Stream error:', data.message);
       }
     };
 
@@ -245,7 +255,7 @@ export default function Home() {
               </h1>
             </div>
             <p className="text-terminal-muted text-sm md:text-base max-w-md">
-              Real-time Solana transaction tracker for Pump.fun and Raydium
+              Real-time Solana transaction tracker for Pump.fun and Solana tokens on other Dexes.
             </p>
           </div>
 
