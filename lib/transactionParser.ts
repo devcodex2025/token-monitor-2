@@ -66,26 +66,51 @@ export class TransactionParser {
     tokenTransfer: any,
     feePayer: string
   ): Transaction | null {
-    const { signature, timestamp, accountData, tokenTransfers: allTokenTransfers } = heliusTx;
+    const { signature, timestamp, accountData, tokenTransfers: allTokenTransfers, nativeTransfers } = heliusTx;
     const WSOL_MINT = 'So11111111111111111111111111111111111111112';
 
     // Find transfers going TO the user (receiving tokens back)
     let solAmount = 0;
     let tokenAmount = 0;
+    let claimFeesAmount = 0;
     const tokenTransfers = allTokenTransfers || [];
     
-    // First try to get from tokenTransfers (standard case)
+    // Collect WSOL transfers to detect combined Remove Liquidity + Claim Fees
+    const wsolTransfersToUser: number[] = [];
+
+    // Check Native Transfers (SOL)
+    if (nativeTransfers) {
+      for (const transfer of nativeTransfers) {
+        if (transfer.toUserAccount === feePayer) {
+          // Native transfers are in lamports, convert to SOL
+          wsolTransfersToUser.push(transfer.amount / 1e9);
+        }
+      }
+    }
+    
+    // Collect ALL transfers going TO user (might include both liquidity + fees)
     for (const transfer of tokenTransfers) {
       // Check if user is receiving (toUserAccount matches feePayer)
       const isUserReceiving = transfer.toUserAccount === feePayer;
       
       if (isUserReceiving) {
         if (transfer.mint === WSOL_MINT) {
-          solAmount += transfer.tokenAmount;
+          wsolTransfersToUser.push(transfer.tokenAmount);
         } else if (transfer.mint === tokenMint) {
           tokenAmount += transfer.tokenAmount;
         }
       }
+    }
+    
+    // If multiple WSOL transfers, the smallest one is likely Claim Fees
+    if (wsolTransfersToUser.length > 1) {
+      // Sort to find smallest
+      wsolTransfersToUser.sort((a, b) => a - b);
+      claimFeesAmount = wsolTransfersToUser[0]; // Smallest = fees
+      solAmount = wsolTransfersToUser.slice(1).reduce((sum, amt) => sum + amt, 0); // Rest = liquidity
+    } else {
+      // Single WSOL transfer = just liquidity
+      solAmount = wsolTransfersToUser[0] || 0;
     }
 
     // If we didn't find SOL in tokenTransfers, check accountData for user's balance change
@@ -133,6 +158,30 @@ export class TransactionParser {
       blockTime: timestamp,
       displayToken: 'SOL',
       dex: 'Meteora',
+      claimFeesAmount: claimFeesAmount > 0 ? claimFeesAmount : undefined,
+    };
+  }
+
+  static parseTransfer(
+    heliusTx: HeliusTransaction,
+    tokenMint: string
+  ): Transaction | null {
+    const { signature, timestamp, tokenTransfers, feePayer } = heliusTx;
+    
+    const tokenTransfer = tokenTransfers?.find(t => t.mint === tokenMint);
+    if (!tokenTransfer) return null;
+    
+    return {
+      id: signature,
+      signature,
+      type: 'TRANSFER',
+      wallet: tokenTransfer.fromUserAccount || feePayer || '',
+      tokenAmount: tokenTransfer.tokenAmount || 0,
+      solAmount: 0,
+      timestamp,
+      blockTime: timestamp,
+      displayToken: 'Transfer',
+      dex: undefined,
     };
   }
 
@@ -140,10 +189,8 @@ export class TransactionParser {
     try {
       const { signature, timestamp, tokenTransfers, nativeTransfers, accountData, type, feePayer, source, instructions } = heliusTx;
 
-      // Ignore simple wallet-to-wallet transfers (no trading, no DEX)
-      if (type === 'TRANSFER' && source === 'SOLANA_PROGRAM_LIBRARY') {
-        return null;
-      }
+      // Check if this is a simple wallet-to-wallet transfer
+      const isSimpleTransfer = type === 'TRANSFER' && source === 'SOLANA_PROGRAM_LIBRARY';
 
       // Check if this is a Meteora DLMM transaction first
       const METEORA_DLMM = 'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo';
@@ -155,25 +202,27 @@ export class TransactionParser {
       if (meteoraInstructions && meteoraInstructions.length > 0) {
         // Check if this is Claim Fees: ALL transfers go TO the user (user receives both tokens)
         const ourTokenTransfer = tokenTransfers?.find(t => t.mint === tokenMint);
-        const wsolTransfer = tokenTransfers?.find(t => t.mint === 'So11111111111111111111111111111111111111112');
+        const wsolTransfers = tokenTransfers?.filter(t => t.mint === 'So11111111111111111111111111111111111111112') || [];
         
         // Add Liquidity: user SENDS both tokens TO pool (opposite of Remove Liquidity)
-        const isAddLiquidity = ourTokenTransfer && wsolTransfer &&
+        const isAddLiquidity = ourTokenTransfer && wsolTransfers.length > 0 &&
           ourTokenTransfer.fromUserAccount === feePayer &&
-          wsolTransfer.fromUserAccount === feePayer &&
+          wsolTransfers.every(w => w.fromUserAccount === feePayer) &&
           ourTokenTransfer.toUserAccount !== feePayer &&
-          wsolTransfer.toUserAccount !== feePayer;
+          wsolTransfers.every(w => w.toUserAccount !== feePayer);
         
         if (isAddLiquidity) {
           return this.parseAddLiquidity(heliusTx, tokenMint, feePayer);
         }
         
-        // Claim Fees: user RECEIVES both our token AND WSOL
-        const isClaimFees = ourTokenTransfer && wsolTransfer &&
+        // Claim Fees: exactly 2 transfers TO user (1 WSOL + 1 our token), NOT combined with liquidity
+        const transfersToUser = tokenTransfers?.filter(t => t.toUserAccount === feePayer) || [];
+        const isClaimFees = transfersToUser.length === 2 && // Exactly 2, not more
+          ourTokenTransfer && wsolTransfers.length === 1 &&
           ourTokenTransfer.toUserAccount === feePayer &&
-          wsolTransfer.toUserAccount === feePayer &&
+          wsolTransfers[0].toUserAccount === feePayer &&
           ourTokenTransfer.fromUserAccount !== feePayer &&
-          wsolTransfer.fromUserAccount !== feePayer;
+          wsolTransfers[0].fromUserAccount !== feePayer;
         
         if (isClaimFees) {
           return this.parseClaimFees(heliusTx, tokenMint, feePayer);
@@ -473,6 +522,11 @@ export class TransactionParser {
       // If no SOL/USDC/USDT found and transaction is claim-related, mark as such
       if (solAmount === 0 && (type === 'CLAIM_POSITION_FEE' || type?.includes('CLAIM'))) {
         displayToken = 'Fees';
+      }
+
+      // If this is a simple transfer, parse it as TRANSFER type
+      if (isSimpleTransfer) {
+        return this.parseTransfer(heliusTx, tokenMint);
       }
 
       return {

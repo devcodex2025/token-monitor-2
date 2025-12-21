@@ -93,4 +93,8 @@
   .transaction-add-lp {
     @apply border-l-4 border-green-500;
   }
+  
+  .transaction-transfer {
+    @apply border-l-4 border-blue-500;
+  }
 }

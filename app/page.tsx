@@ -128,6 +128,12 @@ export default function Home() {
       reconnectTimeoutRef.current = null;
     }
 
+    // Close existing connection if any
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+
     // Use Server-Sent Events for Vercel compatibility
     const eventSource = new EventSource(`/api/stream?token=${encodeURIComponent(config.tokenAddress)}`);
 

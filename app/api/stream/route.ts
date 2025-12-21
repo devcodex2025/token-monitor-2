@@ -86,13 +86,17 @@ export async function GET(req: NextRequest) {
         // Check if WebSocket already exists for this token
         if (websockets.has(tokenAddress)) {
           const existingWs = websockets.get(tokenAddress)!;
-          if (existingWs.readyState === WebSocket.OPEN) {
-            console.log(`♻️ Reusing WebSocket for ${tokenAddress.slice(0, 8)}...`);
-            sendEvent({ 
-              type: 'connected', 
-              message: 'Connected to shared WebSocket',
-              tokenAddress: tokenAddress.slice(0, 8) + '...'
-            });
+          // Reuse if OPEN or CONNECTING
+          if (existingWs.readyState === WebSocket.OPEN || existingWs.readyState === WebSocket.CONNECTING) {
+            console.log(`♻️ Reusing WebSocket for ${tokenAddress.slice(0, 8)}... (State: ${existingWs.readyState})`);
+            
+            if (existingWs.readyState === WebSocket.OPEN) {
+              sendEvent({ 
+                type: 'connected', 
+                message: 'Connected to shared WebSocket',
+                tokenAddress: tokenAddress.slice(0, 8) + '...'
+              });
+            }
             return; // Reuse existing connection
           } else {
             // Clean up dead WebSocket

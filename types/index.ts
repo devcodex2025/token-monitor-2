@@ -1,7 +1,7 @@
 export interface Transaction {
   id: string;
   signature: string;
-  type: 'BUY' | 'SELL' | 'REMOVE_LIQUIDITY' | 'CLAIM_FEES' | 'ADD_LIQUIDITY';
+  type: 'BUY' | 'SELL' | 'REMOVE_LIQUIDITY' | 'CLAIM_FEES' | 'ADD_LIQUIDITY' | 'TRANSFER';
   wallet: string;
   tokenAmount: number;
   solAmount: number;
@@ -9,6 +9,7 @@ export interface Transaction {
   blockTime: number;
   displayToken?: string;
   dex?: string;
+  claimFeesAmount?: number; // For combined Remove Liquidity + Claim Fees
 }
 
 export interface TokenMonitorConfig {

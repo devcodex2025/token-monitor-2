@@ -4,6 +4,17 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { Transaction } from '@/types';
 import { shortenAddress, formatSolAmount, formatTime, formatDateTime, timeAgo } from '@/lib/utils';
 
+// Transaction type filter options
+type TransactionType = Transaction['type'];
+const TRANSACTION_TYPES: { value: TransactionType; label: string; emoji: string }[] = [
+  { value: 'BUY', label: 'Buy', emoji: '📈' },
+  { value: 'SELL', label: 'Sell', emoji: '📉' },
+  { value: 'ADD_LIQUIDITY', label: 'Add LP', emoji: '💧' },
+  { value: 'REMOVE_LIQUIDITY', label: 'Remove LP', emoji: '💧' },
+  { value: 'CLAIM_FEES', label: 'Claim Fees', emoji: '💰' },
+  { value: 'TRANSFER', label: 'Transfer', emoji: '↔️' },
+];
+
 // DEX Configuration
 const DEX_INFO: Record<string, { name: string; logo?: string; color?: string }> = {
   'JUPITER': { 
@@ -83,10 +94,49 @@ export default function TransactionFeed({ transactions, onLoadMore, isLoadingMor
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isFirstRender = useRef(true);
 
+  // Filter state - load from localStorage
+  const [selectedTypes, setSelectedTypes] = useState<Set<TransactionType>>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('transactionTypeFilters');
+      if (saved) {
+        try {
+          return new Set(JSON.parse(saved));
+        } catch (e) {
+          // Fallback to all types
+        }
+      }
+    }
+    // Default: show all types
+    return new Set(TRANSACTION_TYPES.map(t => t.value));
+  });
+
+  // Save filters to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('transactionTypeFilters', JSON.stringify(Array.from(selectedTypes)));
+  }, [selectedTypes]);
+
+  // Toggle filter
+  const toggleFilter = (type: TransactionType) => {
+    setSelectedTypes(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(type)) {
+        newSet.delete(type);
+      } else {
+        newSet.add(type);
+      }
+      return newSet;
+    });
+  };
+
+  // Filter and sort transactions
+  const filteredAndSortedTransactions = useMemo(() => {
+    return [...transactions]
+      .filter(tx => selectedTypes.has(tx.type))
+      .sort((a, b) => b.blockTime - a.blockTime);
+  }, [transactions, selectedTypes]);
+
   // Sort transactions by date (newest first)
-  const sortedTransactions = useMemo(() => {
-    return [...transactions].sort((a, b) => b.blockTime - a.blockTime);
-  }, [transactions]);
+  const sortedTransactions = filteredAndSortedTransactions;
 
   // Initialize audio
   useEffect(() => {
@@ -137,12 +187,31 @@ export default function TransactionFeed({ transactions, onLoadMore, isLoadingMor
       <div className="bg-terminal-bg border-b border-terminal-border px-4 py-3 flex items-center justify-between flex-shrink-0">
         <h2 className="text-lg font-semibold">Transaction Feed</h2>
         <div className="text-sm text-terminal-muted">
-          {sortedTransactions.length} transactions
+          {sortedTransactions.length} / {transactions.length} transactions
         </div>
       </div>
 
+      {/* Filters */}
+      <div className="bg-terminal-surface/30 border-b border-terminal-border px-4 py-2 flex flex-wrap gap-2 flex-shrink-0">
+        <span className="text-xs text-terminal-muted self-center">Show:</span>
+        {TRANSACTION_TYPES.map(type => (
+          <button
+            key={type.value}
+            onClick={() => toggleFilter(type.value)}
+            className={`text-xs px-2 py-1 rounded transition-colors ${
+              selectedTypes.has(type.value)
+                ? 'bg-terminal-success/20 text-terminal-success border border-terminal-success/50'
+                : 'bg-terminal-bg/50 text-terminal-muted border border-terminal-border hover:border-terminal-muted/50'
+            }`}
+          >
+            <span className="mr-1">{type.emoji}</span>
+            {type.label}
+          </button>
+        ))}
+      </div>
+
       {/* Table Header */}
-      <div className="flex items-center gap-4 px-4 py-2 bg-terminal-surface/50 border-b border-terminal-border text-xs font-medium text-terminal-muted uppercase tracking-wider">
+      <div className="flex items-center gap-4 px-4 py-2 bg-terminal-surface/50 border-b border-terminal-border text-xs font-medium text-terminal-muted uppercase tracking-wider flex-shrink-0">
         <div className="w-20">Time</div>
         <div className="w-16">Type</div>
         <div className="w-24">DEX</div>
@@ -178,6 +247,7 @@ function TransactionRow({ transaction }: { transaction: Transaction }) {
   const isRemoveLiquidity = transaction.type === 'REMOVE_LIQUIDITY';
   const isClaimFees = transaction.type === 'CLAIM_FEES';
   const isAddLiquidity = transaction.type === 'ADD_LIQUIDITY';
+  const isTransfer = transaction.type === 'TRANSFER';
   const [timeAgoStr, setTimeAgoStr] = useState(timeAgo(transaction.blockTime));
 
   // Update time ago every second
@@ -187,11 +257,17 @@ function TransactionRow({ transaction }: { transaction: Transaction }) {
     }, 1000);
     return () => clearInterval(interval);
   }, [transaction.blockTime]);
+
+  const handleCopy = (text: string) => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+    }
+  };
   
   return (
     <div
       className={`transaction-row animate-slide-in ${
-        isBuy ? 'transaction-buy' : isSell ? 'transaction-sell' : isClaimFees ? 'transaction-claim' : 'transaction-remove'
+        isBuy ? 'transaction-buy' : isSell ? 'transaction-sell' : isClaimFees ? 'transaction-claim' : isAddLiquidity ? 'transaction-add-lp' : isTransfer ? 'transaction-transfer' : 'transaction-remove'
       }`}
     >
       <div className="flex items-center gap-4 flex-1 px-4">
@@ -221,6 +297,8 @@ function TransactionRow({ transaction }: { transaction: Transaction }) {
                 ? 'bg-yellow-500/20 text-yellow-400'
                 : isAddLiquidity
                 ? 'bg-green-500/20 text-green-400'
+                : isTransfer
+                ? 'bg-blue-500/20 text-blue-400'
                 : 'bg-purple-500/20 text-purple-400'
             }`}
           >
@@ -239,6 +317,11 @@ function TransactionRow({ transaction }: { transaction: Transaction }) {
                 <span>💧</span>
                 <span>-LP</span>
               </span>
+            ) : isTransfer ? (
+              <span className="flex items-center gap-1">
+                <span>↔️</span>
+                <span>XFER</span>
+              </span>
             ) : (
               isBuy ? 'BUY' : 'SELL'
             )}
@@ -251,12 +334,20 @@ function TransactionRow({ transaction }: { transaction: Transaction }) {
         </div>
 
         {/* Transaction ID */}
-        <div className="font-mono text-xs text-terminal-muted hidden md:block w-20 flex-shrink-0" title={transaction.signature}>
+        <div 
+          className="font-mono text-xs text-terminal-muted hidden md:block w-20 flex-shrink-0 cursor-pointer hover:text-terminal-text transition-colors select-none" 
+          title="Double click to copy Transaction ID"
+          onDoubleClick={() => handleCopy(transaction.signature)}
+        >
           {shortenAddress(transaction.signature, 4)}
         </div>
 
         {/* Wallet */}
-        <div className="font-mono text-sm text-terminal-text/80 flex-1 min-w-0 truncate">
+        <div 
+          className="font-mono text-sm text-terminal-text/80 flex-1 min-w-0 truncate cursor-pointer hover:text-terminal-text transition-colors select-none"
+          title="Double click to copy Wallet Address"
+          onDoubleClick={() => handleCopy(transaction.wallet)}
+        >
           {shortenAddress(transaction.wallet)}
         </div>
 
@@ -269,7 +360,28 @@ function TransactionRow({ transaction }: { transaction: Transaction }) {
                 <span>(Claim Fees)</span>
               </span>
             ) : isRemoveLiquidity || isClaimFees ? (
-              // Show both tokens for Remove Liquidity and Claim Fees (receiving)
+              // Remove Liquidity: liquidity exits pool (negative for token monitoring)
+              // Claim Fees: rewards received (positive)
+              <div className="flex flex-col items-end gap-0.5">
+                <div className="flex items-center gap-1">
+                  <span className="text-terminal-muted text-xs">{isClaimFees ? '+' : '-'}</span>
+                  <span>{formatSolAmount(transaction.solAmount)} SOL</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-terminal-muted text-xs">{isClaimFees ? '+' : '-'}</span>
+                  <span className="text-xs">{transaction.tokenAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })} tokens</span>
+                </div>
+                {/* Show combined Claim Fees if present */}
+                {transaction.claimFeesAmount && transaction.claimFeesAmount > 0 && (
+                  <div className="flex items-center gap-1 text-yellow-400 mt-1">
+                    <span className="text-xs">💰</span>
+                    <span className="text-terminal-muted text-xs">+</span>
+                    <span className="text-xs">{formatSolAmount(transaction.claimFeesAmount)} SOL fees</span>
+                  </div>
+                )}
+              </div>
+            ) : isAddLiquidity ? (
+              // Add Liquidity: liquidity added to pool (positive for token monitoring)
               <div className="flex flex-col items-end gap-0.5">
                 <div className="flex items-center gap-1">
                   <span className="text-terminal-muted text-xs">+</span>
@@ -280,16 +392,15 @@ function TransactionRow({ transaction }: { transaction: Transaction }) {
                   <span className="text-xs">{transaction.tokenAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })} tokens</span>
                 </div>
               </div>
-            ) : isAddLiquidity ? (
-              // Show both tokens for Add Liquidity (sending)
+            ) : isTransfer ? (
+              // Simple Transfer: show only token amount
               <div className="flex flex-col items-end gap-0.5">
                 <div className="flex items-center gap-1">
-                  <span className="text-terminal-muted text-xs">-</span>
-                  <span>{formatSolAmount(transaction.solAmount)} SOL</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-terminal-muted text-xs">-</span>
+                  <span className="text-terminal-muted text-xs">↔️</span>
                   <span className="text-xs">{transaction.tokenAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })} tokens</span>
+                </div>
+                <div className="text-xs text-terminal-muted/70">
+                  Wallet transfer
                 </div>
               </div>
             ) : (
@@ -298,7 +409,7 @@ function TransactionRow({ transaction }: { transaction: Transaction }) {
               </>
             )}
           </div>
-          {!isRemoveLiquidity && !isClaimFees && !isAddLiquidity && (
+          {!isRemoveLiquidity && !isClaimFees && !isAddLiquidity && !isTransfer && (
             <div className="text-xs text-terminal-muted">
               {transaction.tokenAmount.toLocaleString('en-US')} tokens
             </div>
