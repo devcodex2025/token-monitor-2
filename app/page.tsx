@@ -87,10 +87,11 @@ export default function Home() {
 
         const data = await response.json();
         setTransactions(data.transactions || []);
+      } else {
+        // Connect to WebSocket only in live mode
+        connectWebSocket();
       }
 
-      // Connect to WebSocket
-      connectWebSocket();
       setIsMonitoring(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
