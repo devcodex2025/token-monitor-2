@@ -66,7 +66,12 @@ const DEX_INFO: Record<string, { name: string; logo?: string; color?: string }> 
     logo: 'https://static.okx.com/cdn/assets/imgs/241/5D665720D6835725.png',
     color: '#000000'
   },
-  'METEORA DLMM': { 
+  'OKX DEX': { 
+    name: 'OKX DEX', 
+    logo: 'https://static.okx.com/cdn/assets/imgs/241/5D665720D6835725.png',
+    color: '#000000'
+  },
+  'METEORA DLMM': {  
     name: 'Meteora DLMM', 
     logo: '/logos/meteora-logo.svg',
     color: '#9333ea' // purple-600

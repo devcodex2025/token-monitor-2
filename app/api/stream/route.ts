@@ -1,5 +1,4 @@
 import { NextRequest } from 'next/server';
-import WebSocket from 'ws';
 import { TransactionParser } from '@/lib/transactionParser';
 import { WebSocketTransformer } from '@/lib/websocketTransformer';
 import { connections, websockets } from '../shared/connections';
@@ -116,7 +115,7 @@ export async function GET(req: NextRequest) {
         const heliusWs = new WebSocket(wsUrl);
         websockets.set(tokenAddress, heliusWs);
 
-        heliusWs.on('open', () => {
+        heliusWs.onopen = () => {
           console.log(`🔌 WebSocket connected for ${tokenAddress.slice(0, 8)}...`);
           
           // Subscribe to transactions
@@ -150,11 +149,12 @@ export async function GET(req: NextRequest) {
               } catch (err) {}
             });
           }
-        });
+        };
 
-        heliusWs.on('message', async (data: Buffer) => {
+        heliusWs.onmessage = async (event) => {
           try {
-            const response = JSON.parse(data.toString());
+            const dataStr = typeof event.data === 'string' ? event.data : new TextDecoder().decode(event.data as ArrayBuffer);
+            const response = JSON.parse(dataStr);
             
             // Handle subscription confirmation
             if (response.result) {
@@ -169,15 +169,15 @@ export async function GET(req: NextRequest) {
           } catch (error) {
             console.error('WebSocket message error:', error);
           }
-        });
+        };
 
-        heliusWs.on('error', (error) => {
+        heliusWs.onerror = (error) => {
           console.error('WebSocket error:', error);
           sendEvent({ type: 'error', message: 'Upstream WebSocket connection failed' });
           websockets.delete(tokenAddress);
-        });
+        };
 
-        heliusWs.on('close', () => {
+        heliusWs.onclose = () => {
           console.log(`🔌 WebSocket disconnected for ${tokenAddress.slice(0, 8)}...`);
           websockets.delete(tokenAddress);
           
@@ -187,16 +187,7 @@ export async function GET(req: NextRequest) {
             console.log('Reconnecting WebSocket in 3s...');
             setTimeout(connectHeliusWebSocket, 3000);
           }
-        });
-
-        // Keep WebSocket alive
-        const wsPing = setInterval(() => {
-          if (heliusWs.readyState === WebSocket.OPEN) {
-            heliusWs.ping();
-          } else {
-            clearInterval(wsPing);
-          }
-        }, 10000);
+        };
       };
 
       // Start WebSocket connection
@@ -255,5 +246,5 @@ export async function GET(req: NextRequest) {
 }
 
 
-export const runtime = 'nodejs';
+export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
