@@ -594,6 +594,7 @@ export class TransactionParser {
         timestamp: Date.now(),
         blockTime: timestamp,
         dex,
+        walletBalance: heliusTx.accountBalances?.[actualWallet],
       };
     } catch (error) {
       console.error('Error parsing transaction:', error);

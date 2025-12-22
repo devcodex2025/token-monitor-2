@@ -10,6 +10,7 @@ export interface Transaction {
   displayToken?: string;
   dex?: string;
   claimFeesAmount?: number; // For combined Remove Liquidity + Claim Fees
+  walletBalance?: number; // Wallet SOL balance
 }
 
 export interface TokenMonitorConfig {
@@ -53,4 +54,5 @@ export interface HeliusTransaction {
       };
     }>;
   }>;
+  accountBalances?: Record<string, number>; // Map of account address to SOL balance
 }

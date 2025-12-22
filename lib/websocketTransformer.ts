@@ -37,10 +37,18 @@ export class WebSocketTransformer {
     try {
       const { slot, signature, transaction } = wsTransaction;
       const { meta } = transaction;
-      const accountKeys = transaction.transaction.message.accountKeys;
+      const rawAccountKeys = transaction.transaction.message.accountKeys;
+      
+      // Normalize accountKeys to ensure they are objects with pubkey
+      const accountKeys = rawAccountKeys.map((key: any) => {
+        if (typeof key === 'string') {
+          return { pubkey: key, signer: false, writable: false, source: 'transaction' };
+        }
+        return key;
+      });
 
       // Extract fee payer (first signer)
-      const feePayer = accountKeys.find(key => key.signer)?.pubkey || '';
+      const feePayer = accountKeys.find(key => key.signer)?.pubkey || accountKeys[0]?.pubkey || '';
 
       // Extract token transfers from innerInstructions AND tokenBalances
       const tokenTransfers: any[] = [];
@@ -144,6 +152,13 @@ export class WebSocketTransformer {
       }
 
       // Build Enhanced format
+      const accountBalances: Record<string, number> = {};
+      accountKeys.forEach((key, index) => {
+        if (meta.postBalances && meta.postBalances[index] !== undefined) {
+          accountBalances[key.pubkey] = meta.postBalances[index] / 1e9; // Convert lamports to SOL
+        }
+      });
+
       const enhanced: HeliusTransaction = {
         signature,
         timestamp: Math.floor(Date.now() / 1000), // Use current time or derive from slot
@@ -155,6 +170,7 @@ export class WebSocketTransformer {
           nativeBalanceChange: 0,
           tokenBalanceChanges: [],
         })),
+        accountBalances,
         transactionError: meta.err,
         instructions: transaction.transaction.message.instructions,
         events: {},
