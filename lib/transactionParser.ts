@@ -170,7 +170,7 @@ export class TransactionParser {
       // Determine DEX/Platform
       let dex = source || 'Unknown';
       if (accountData) {
-        const programMap = {
+        const programMap: Record<string, string> = {
           'boop8hVGQGQGqehUK2iVEMEnMrL5RbjywRzHKBmBE7ry4': 'BOOP.FUN',
           '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P': 'PUMP.FUN',
           'MoonCVVNZFSYkqN5438hi3fulh6Nj59sbpxmaxhY9Q': 'MOONSHOT',
@@ -208,7 +208,7 @@ export class TransactionParser {
     }
   }
 
-  private static isUserAccount(address) {
+  private static isUserAccount(address: string) {
     const knownPrograms = [
       '11111111111111111111111111111111',
       'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
