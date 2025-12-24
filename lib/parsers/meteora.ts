@@ -5,6 +5,7 @@ export class MeteoraParser extends BaseParser {
   private static METEORA_DLMM = 'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo';
   private static DISCRIMINATORS = {
     ADD_LIQUIDITY: '4Co7us6MBHJN',
+    ADD_LIQUIDITY_STRATEGY: '2GpD59YMjQrR',
     REMOVE_LIQUIDITY: '7FKxUv3oxZYZ',
   };
 
@@ -27,7 +28,8 @@ export class MeteoraParser extends BaseParser {
     if (meteoraInstructions) {
       for (const ix of meteoraInstructions) {
         if (ix.data) {
-          if (ix.data.startsWith(MeteoraParser.DISCRIMINATORS.ADD_LIQUIDITY)) {
+          if (ix.data.startsWith(MeteoraParser.DISCRIMINATORS.ADD_LIQUIDITY) || 
+              ix.data.startsWith(MeteoraParser.DISCRIMINATORS.ADD_LIQUIDITY_STRATEGY)) {
             return this.parseAddLiquidity(transaction, tokenMint, feePayer);
           }
           if (ix.data.startsWith(MeteoraParser.DISCRIMINATORS.REMOVE_LIQUIDITY)) {
