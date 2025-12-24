@@ -47,6 +47,8 @@ export interface HeliusTransaction {
     account: string;
     nativeBalanceChange?: number;
     tokenBalanceChanges?: Array<{
+      userAccount?: string;
+      tokenAccount?: string;
       mint: string;
       rawTokenAmount: {
         tokenAmount: string;
