@@ -51,14 +51,31 @@ export class OnchainLabsParser extends BaseParser {
 
     // Check for WSOL transfers first (common in DEX swaps)
     const WSOL_MINT = 'So11111111111111111111111111111111111111112';
+    
+    // Create a set of native transfer amounts for quick lookup
+    // This helps identify if a token transfer amount is actually in raw lamports
+    const nativeAmounts = new Set(nativeTransfers?.map(t => t.amount) || []);
+
     if (tokenTransfers) {
         // First pass: check for direct user involvement
         for (const transfer of tokenTransfers) {
             if (transfer.mint === WSOL_MINT) {
+                let amount = transfer.tokenAmount;
+                
+                // Check if this amount matches any native transfer exactly (in lamports)
+                // This handles cases where Helius returns raw lamports for WSOL transfers
+                // that correspond to native SOL movements (wrapping/unwrapping)
+                if (nativeAmounts.has(amount)) {
+                    amount = amount / 1e9;
+                } else if (amount > 1000000000) {
+                    // Fallback: If amount > 1 billion (exceeds total SOL supply), it must be lamports
+                    amount = amount / 1e9;
+                }
+
                 if (type === 'BUY' && transfer.fromUserAccount === wallet) {
-                    solAmount += transfer.tokenAmount;
+                    solAmount += amount;
                 } else if (type === 'SELL' && transfer.toUserAccount === wallet) {
-                    solAmount += transfer.tokenAmount;
+                    solAmount += amount;
                 }
             }
         }
@@ -67,10 +84,18 @@ export class OnchainLabsParser extends BaseParser {
         if (solAmount === 0) {
              for (const transfer of tokenTransfers) {
                 if (transfer.mint === WSOL_MINT) {
+                    let amount = transfer.tokenAmount;
+                    
+                    if (nativeAmounts.has(amount)) {
+                        amount = amount / 1e9;
+                    } else if (amount > 1000000000) {
+                        amount = amount / 1e9;
+                    }
+
                     // We take the largest WSOL transfer as the likely swap value
                     // This is a heuristic but works for most router-based swaps where user doesn't touch WSOL
-                    if (transfer.tokenAmount > solAmount) {
-                        solAmount = transfer.tokenAmount;
+                    if (amount > solAmount) {
+                        solAmount = amount;
                     }
                 }
             }
