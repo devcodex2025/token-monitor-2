@@ -1,6 +1,7 @@
 import { HeliusTransaction, Transaction } from '../../types';
 import { BaseParser } from './base';
 import { PublicKey } from '@solana/web3.js';
+import bs58 from 'bs58';
 
 export class PumpFunParser extends BaseParser {
   private static PUMP_FUN_PROGRAM_ID = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
@@ -16,7 +17,7 @@ export class PumpFunParser extends BaseParser {
 
   parse(transaction: HeliusTransaction, tokenMint: string): Transaction | null {
     try {
-      const { tokenTransfers } = transaction;
+      const { tokenTransfers, instructions } = transaction;
       
       // Derive Bonding Curve Address
       const PUMP_FUN_PROGRAM = new PublicKey(PumpFunParser.PUMP_FUN_PROGRAM_ID);
@@ -50,20 +51,64 @@ export class PumpFunParser extends BaseParser {
         wallet = curveTransfer.fromUserAccount;
       }
 
-      // Calculate SOL amount based on transfers to/from bonding curve
-      // This is more reliable than summing user transfers as it captures the actual trade value
+      // Calculate SOL amount
       let solAmount = 0;
-      if (transaction.nativeTransfers) {
-        for (const transfer of transaction.nativeTransfers) {
-          if (type === 'BUY' && transfer.toUserAccount === bondingCurveAddress) {
-            solAmount += transfer.amount;
-          } else if (type === 'SELL' && transfer.fromUserAccount === bondingCurveAddress) {
-            solAmount += transfer.amount;
-          }
+
+      // Strategy: Sum native transfers inside the Pump.fun instruction
+      // This captures the actual cost (Curve + Fee) excluding external tips/fees
+      const pumpInstruction = instructions?.find((ix: any) => ix.programId === PumpFunParser.PUMP_FUN_PROGRAM_ID);
+      
+      if (pumpInstruction && pumpInstruction.innerInstructions) {
+        for (const inner of pumpInstruction.innerInstructions) {
+            if (inner.programId === '11111111111111111111111111111111') {
+                try {
+                    const data = bs58.decode(inner.data);
+                    // Transfer instruction: index (4 bytes) + amount (8 bytes)
+                    if (data.length >= 12) {
+                        const instructionIndex = data.readUInt32LE(0);
+                        if (instructionIndex === 2) { // Transfer
+                            const amount = Number(data.readBigUInt64LE(4));
+                            const source = inner.accounts[0];
+                            const dest = inner.accounts[1];
+                            
+                            if (type === 'BUY') {
+                                if (source === wallet) {
+                                    solAmount += amount;
+                                }
+                            } else { // SELL
+                                if (dest === wallet) {
+                                    solAmount += amount;
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // ignore
+                }
+            }
         }
-        if (solAmount > 0) {
+      }
+      
+      if (solAmount > 0) {
           solAmount = solAmount / 1e9;
-        }
+      } else {
+          // Fallback: Use global nativeTransfers
+          if (transaction.nativeTransfers) {
+            for (const transfer of transaction.nativeTransfers) {
+              if (type === 'BUY') {
+                if (transfer.fromUserAccount === wallet && transfer.toUserAccount !== wallet) {
+                  solAmount += transfer.amount;
+                }
+              } else if (type === 'SELL') {
+                if (transfer.toUserAccount === wallet && transfer.fromUserAccount !== wallet) {
+                  solAmount += transfer.amount;
+                }
+              }
+            }
+            if (solAmount > 0) {
+              solAmount = solAmount / 1e9;
+            }
+          }
       }
 
       return this.createTransaction(
