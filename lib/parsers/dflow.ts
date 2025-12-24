@@ -67,8 +67,27 @@ export class DFlowParser extends BaseParser {
 
     // If SOL amount is still 0 (e.g. pure Token-Token swap with no intermediate SOL visible in native transfers),
     // we might check for WSOL transfers.
-    if (solAmount === 0 && tokenTransfers) {
-        const WSOL_MINT = 'So11111111111111111111111111111111111111112';
+    // Also, if we have WSOL transfers, we should prioritize them over USDC if the user wants to see SOL value.
+    // In DFlow, often USDC -> WSOL -> Token. We want the WSOL amount that was swapped for the token.
+    const WSOL_MINT = 'So11111111111111111111111111111111111111112';
+    let wsolAmount = 0;
+    
+    if (tokenTransfers) {
+        for (const transfer of tokenTransfers) {
+            if (transfer.mint === WSOL_MINT) {
+                if (type === 'SELL' && transfer.toUserAccount === wallet) {
+                    wsolAmount += transfer.tokenAmount;
+                } else if (type === 'BUY' && transfer.fromUserAccount === wallet) {
+                    wsolAmount += transfer.tokenAmount;
+                }
+            }
+        }
+    }
+    
+    if (wsolAmount > 0) {
+        solAmount = wsolAmount;
+    } else if (solAmount === 0 && tokenTransfers) {
+        // Fallback to previous logic if no WSOL found
         for (const transfer of tokenTransfers) {
             if (transfer.mint === WSOL_MINT) {
                 if (type === 'SELL' && transfer.toUserAccount === wallet) {
@@ -80,6 +99,41 @@ export class DFlowParser extends BaseParser {
         }
     }
 
+    let displayToken = 'SOL';
+    
+    // Check for USDC/USDT if SOL amount is negligible (likely just rent or fees)
+    if (solAmount < 0.01 && tokenTransfers) {
+        const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+        const USDT_MINT = 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB';
+        
+        let totalUsdc = 0;
+        let totalUsdt = 0;
+
+        for (const transfer of tokenTransfers) {
+            if (transfer.mint === USDC_MINT) {
+                if (type === 'SELL' && transfer.toUserAccount === wallet) {
+                    totalUsdc += transfer.tokenAmount;
+                } else if (type === 'BUY' && transfer.fromUserAccount === wallet) {
+                    totalUsdc += transfer.tokenAmount;
+                }
+            } else if (transfer.mint === USDT_MINT) {
+                if (type === 'SELL' && transfer.toUserAccount === wallet) {
+                    totalUsdt += transfer.tokenAmount;
+                } else if (type === 'BUY' && transfer.fromUserAccount === wallet) {
+                    totalUsdt += transfer.tokenAmount;
+                }
+            }
+        }
+        
+        if (totalUsdc > 0) {
+            solAmount = totalUsdc;
+            displayToken = 'USDC';
+        } else if (totalUsdt > 0) {
+            solAmount = totalUsdt;
+            displayToken = 'USDT';
+        }
+    }
+
     return this.createTransaction(
         transaction,
         type,
@@ -87,7 +141,8 @@ export class DFlowParser extends BaseParser {
         tokenTransfer.tokenAmount,
         tokenMint,
         'DFlow',
-        solAmount
+        solAmount,
+        displayToken
     );
   }
 }
