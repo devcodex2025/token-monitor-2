@@ -293,10 +293,10 @@ export default function Home() {
 
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-terminal-panel border border-terminal-border text-xs font-medium text-terminal-muted">
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-terminal-success opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-terminal-success"></span>
+              <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${connectionStatus === 'connected' ? 'animate-ping bg-terminal-success' : 'bg-terminal-danger'}`}></span>
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${connectionStatus === 'connected' ? 'bg-terminal-success' : 'bg-terminal-danger'}`}></span>
             </span>
-            System Online
+            {connectionStatus === 'connected' ? 'System Online' : 'System Offline'}
           </div>
         </div>
 
