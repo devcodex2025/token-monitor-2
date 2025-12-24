@@ -17,10 +17,49 @@ export class JupiterParser extends BaseParser {
   }
 
   parse(transaction: HeliusTransaction, tokenMint: string): Transaction | null {
-    const { signature, timestamp, tokenTransfers, nativeTransfers, feePayer, instructions } = transaction;
+    const { signature, timestamp, tokenTransfers, nativeTransfers, feePayer, instructions, accountData } = transaction;
 
     // Find all transfers for the monitored token
-    const relevantTransfers = tokenTransfers?.filter(t => t.mint === tokenMint) || [];
+    let relevantTransfers = tokenTransfers?.filter(t => t.mint === tokenMint) || [];
+    
+    // Fallback: If no token transfers found, check accountData for balance changes
+    if (relevantTransfers.length === 0 && accountData) {
+        const accountChanges = accountData.filter(ad => 
+            ad.tokenBalanceChanges?.some(tbc => tbc.mint === tokenMint)
+        );
+        
+        if (accountChanges.length > 0) {
+            relevantTransfers = accountChanges.flatMap(ad => {
+                const change = ad.tokenBalanceChanges!.find(tbc => tbc.mint === tokenMint)!;
+                if (!change.rawTokenAmount) return [];
+                
+                const rawAmount = change.rawTokenAmount;
+                const amount = parseFloat(rawAmount.tokenAmount) / Math.pow(10, rawAmount.decimals);
+                
+                if (amount === 0) return [];
+
+                // Create virtual transfer
+                if (amount < 0) {
+                    return [{
+                        fromUserAccount: change.userAccount || ad.account,
+                        toUserAccount: '', 
+                        tokenAmount: Math.abs(amount),
+                        mint: tokenMint,
+                        tokenStandard: 'Fungible'
+                    }];
+                } else {
+                    return [{
+                        fromUserAccount: '', 
+                        toUserAccount: change.userAccount || ad.account,
+                        tokenAmount: amount,
+                        mint: tokenMint,
+                        tokenStandard: 'Fungible'
+                    }];
+                }
+            });
+        }
+    }
+
     if (relevantTransfers.length === 0) return null;
 
     let wallet = feePayer || '';
@@ -86,8 +125,16 @@ export class JupiterParser extends BaseParser {
             type = 'BUY';
         } else {
             // Default fallback
-            wallet = t.toUserAccount;
-            type = 'BUY';
+            if (t.fromUserAccount && !t.toUserAccount) {
+                wallet = t.fromUserAccount;
+                type = 'SELL';
+            } else if (t.toUserAccount && !t.fromUserAccount) {
+                wallet = t.toUserAccount;
+                type = 'BUY';
+            } else {
+                wallet = t.toUserAccount || t.fromUserAccount || feePayer;
+                type = 'BUY';
+            }
         }
         tokenAmount = t.tokenAmount;
     }
@@ -97,6 +144,8 @@ export class JupiterParser extends BaseParser {
     // We need to capture the value of the trade in SOL.
     let solAmount = 0;
     const WSOL_MINT = 'So11111111111111111111111111111111111111112';
+    const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+    const USDT_MINT = 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB';
 
     // 1. Check for WSOL transfers
     if (tokenTransfers) {
@@ -181,6 +230,76 @@ export class JupiterParser extends BaseParser {
         }
     }
 
+    // 4. If still no SOL, check for other tokens (USDC, USDT, etc.)
+    if (solAmount === 0) {
+        // Helper to check transfers
+        const checkTokenTransfers = (transfers: any[]) => {
+            for (const transfer of transfers) {
+                if (transfer.mint === tokenMint) continue; // Skip monitored token
+                if (transfer.mint === WSOL_MINT) continue; // Skip WSOL (already checked)
+
+                let amount = 0;
+                if (type === 'SELL' && transfer.toUserAccount === wallet) {
+                    amount = transfer.tokenAmount;
+                } else if (type === 'BUY' && transfer.fromUserAccount === wallet) {
+                    amount = transfer.tokenAmount;
+                }
+
+                if (amount > 0) {
+                    solAmount = amount;
+                    if (transfer.mint === USDC_MINT) displayToken = 'USDC';
+                    else if (transfer.mint === USDT_MINT) displayToken = 'USDT';
+                    else displayToken = 'UNKNOWN'; 
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        // Check real token transfers
+        if (tokenTransfers && checkTokenTransfers(tokenTransfers)) {
+            // Found
+        } 
+        // Check account data changes if not found in transfers
+        else if (transaction.accountData) {
+             const accountChanges = transaction.accountData.filter(ad => 
+                ad.tokenBalanceChanges?.some(tbc => tbc.mint !== tokenMint && tbc.mint !== WSOL_MINT)
+            );
+            
+            // Construct virtual transfers for other tokens
+            const virtualTransfers = accountChanges.flatMap(ad => {
+                // There might be multiple changes, but usually one per account
+                return (ad.tokenBalanceChanges || []).map(tbc => {
+                    if (tbc.mint === tokenMint || tbc.mint === WSOL_MINT) return null;
+                    if (!tbc.rawTokenAmount) return null;
+                    
+                    const rawAmount = tbc.rawTokenAmount;
+                    const amount = parseFloat(rawAmount.tokenAmount) / Math.pow(10, rawAmount.decimals);
+                    
+                    if (amount === 0) return null;
+
+                    if (amount < 0) {
+                        return {
+                            fromUserAccount: tbc.userAccount || ad.account,
+                            toUserAccount: '', 
+                            tokenAmount: Math.abs(amount),
+                            mint: tbc.mint
+                        };
+                    } else {
+                        return {
+                            fromUserAccount: '', 
+                            toUserAccount: tbc.userAccount || ad.account,
+                            tokenAmount: amount,
+                            mint: tbc.mint
+                        };
+                    }
+                }).filter(t => t !== null);
+            });
+            
+            checkTokenTransfers(virtualTransfers);
+        }
+    }
+
     return this.createTransaction(
         transaction,
         type,
@@ -188,7 +307,8 @@ export class JupiterParser extends BaseParser {
         tokenAmount,
         tokenMint,
         'Jupiter',
-        solAmount
+        solAmount,
+        displayToken
     );
   }
 }

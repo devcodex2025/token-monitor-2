@@ -17,11 +17,12 @@ export abstract class BaseParser implements DexParser {
     tokenAmount: number,
     tokenMint: string,
     dex: string,
-    solAmountOverride?: number
+    solAmountOverride?: number,
+    displayTokenOverride?: string
   ): Transaction {
     const { signature, timestamp, nativeTransfers, tokenTransfers } = heliusTx;
     let solAmount = solAmountOverride || 0;
-    const displayToken = 'SOL';
+    const displayToken = displayTokenOverride || 'SOL';
 
     // Calculate SOL amount if not provided
     if (solAmount === 0) {
