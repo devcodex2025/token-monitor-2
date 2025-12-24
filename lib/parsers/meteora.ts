@@ -6,7 +6,8 @@ export class MeteoraParser extends BaseParser {
   private static DISCRIMINATORS = {
     ADD_LIQUIDITY: '4Co7us6MBHJN',
     ADD_LIQUIDITY_STRATEGY: '2GpD59YMjQrR',
-    REMOVE_LIQUIDITY: '7FKxUv3oxZYZ',
+    REMOVE_LIQUIDITY: '7FKxUv3oxZY',
+    REMOVE_LIQUIDITY_BY_RANGE: 'BH9xzWhK5ook',
   };
 
   canParse(transaction: HeliusTransaction): boolean {
@@ -32,7 +33,8 @@ export class MeteoraParser extends BaseParser {
               ix.data.startsWith(MeteoraParser.DISCRIMINATORS.ADD_LIQUIDITY_STRATEGY)) {
             return this.parseAddLiquidity(transaction, tokenMint, feePayer);
           }
-          if (ix.data.startsWith(MeteoraParser.DISCRIMINATORS.REMOVE_LIQUIDITY)) {
+          if (ix.data.startsWith(MeteoraParser.DISCRIMINATORS.REMOVE_LIQUIDITY) ||
+              ix.data.startsWith(MeteoraParser.DISCRIMINATORS.REMOVE_LIQUIDITY_BY_RANGE)) {
             return this.parseRemoveLiquidity(transaction, tokenMint, feePayer);
           }
         }
@@ -112,12 +114,47 @@ export class MeteoraParser extends BaseParser {
       }
     }
     
-    if (wsolTransfersToUser.length > 1) {
-      wsolTransfersToUser.sort((a, b) => a - b);
-      claimFeesAmount = wsolTransfersToUser[0]; 
-      solAmount = wsolTransfersToUser.slice(1).reduce((sum, amt) => sum + amt, 0); 
+    // Deduplicate WSOL unwrap events (WSOL transfer + Native transfer of similar amount)
+    // Usually Native amount = WSOL amount + Rent (~0.002 SOL)
+    // We sort and look for pairs that are close.
+    wsolTransfersToUser.sort((a, b) => a - b);
+    
+    const uniqueAmounts: number[] = [];
+    const usedIndices = new Set<number>();
+
+    for (let i = 0; i < wsolTransfersToUser.length; i++) {
+        if (usedIndices.has(i)) continue;
+        
+        const current = wsolTransfersToUser[i];
+        let isDuplicate = false;
+
+        // Check if there is a subsequent amount that is very close (within 0.003 SOL)
+        // This accounts for rent exemption (approx 0.002039 SOL)
+        for (let j = i + 1; j < wsolTransfersToUser.length; j++) {
+            if (usedIndices.has(j)) continue;
+            
+            const next = wsolTransfersToUser[j];
+            if (Math.abs(next - current) < 0.003) {
+                // Found a duplicate (likely unwrap), keep the larger one (Native usually) and skip this one
+                // Actually, we just want one of them.
+                uniqueAmounts.push(next);
+                usedIndices.add(j);
+                isDuplicate = true;
+                break;
+            }
+        }
+
+        if (!isDuplicate) {
+            uniqueAmounts.push(current);
+        }
+    }
+
+    if (uniqueAmounts.length > 1) {
+      uniqueAmounts.sort((a, b) => a - b);
+      claimFeesAmount = uniqueAmounts[0]; 
+      solAmount = uniqueAmounts.slice(1).reduce((sum, amt) => sum + amt, 0); 
     } else {
-      solAmount = wsolTransfersToUser[0] || 0;
+      solAmount = uniqueAmounts[0] || 0;
     }
 
     if (solAmount === 0 && accountData) {
