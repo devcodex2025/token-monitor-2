@@ -24,6 +24,7 @@ export default function Home() {
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isMonitoring, setIsMonitoring] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'reconnecting'>('disconnected');
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +37,7 @@ export default function Home() {
     totalVolumeSOL: 0
   });
 
-  const wsRef = useRef<WebSocket | null>(null);
+  const wsRef = useRef<EventSource | WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load saved token address from localStorage on mount
@@ -57,6 +58,7 @@ export default function Home() {
     localStorage.setItem('lastTokenAddress', config.tokenAddress);
 
     setIsLoading(true);
+    setConnectionStatus('connecting');
     setError(null);
     setTransactions([]);
     setTokenInfo(null);
@@ -140,6 +142,7 @@ export default function Home() {
       reconnectTimeoutRef.current = null;
     }
     setIsMonitoring(false);
+    setConnectionStatus('disconnected');
   };
 
   const connectWebSocket = () => {
@@ -161,6 +164,7 @@ export default function Home() {
     eventSource.onopen = () => {
       console.log('SSE connected');
       setError(null); // Clear error on successful connection
+      setConnectionStatus('connected');
     };
 
     eventSource.onmessage = (event) => {
@@ -201,6 +205,7 @@ export default function Home() {
 
     eventSource.onerror = (error) => {
       console.error('SSE error:', error);
+      setConnectionStatus('reconnecting');
       eventSource.close();
       
       // Only reconnect if we are supposed to be monitoring
@@ -406,6 +411,7 @@ export default function Home() {
               transactions={transactions}
               onLoadMore={loadMore}
               isLoadingMore={isLoadingMore}
+              status={connectionStatus}
             />
           </div>
         </div>

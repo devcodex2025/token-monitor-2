@@ -113,9 +113,10 @@ interface TransactionFeedProps {
   transactions: Transaction[];
   onLoadMore?: () => void;
   isLoadingMore?: boolean;
+  status?: 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
 }
 
-export default function TransactionFeed({ transactions, onLoadMore, isLoadingMore }: TransactionFeedProps) {
+export default function TransactionFeed({ transactions, onLoadMore, isLoadingMore, status = 'disconnected' }: TransactionFeedProps) {
   const prevTopTxSig = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isFirstRender = useRef(true);
@@ -195,13 +196,23 @@ export default function TransactionFeed({ transactions, onLoadMore, isLoadingMor
   }, [transactions.length]);
 
   if (transactions.length === 0) {
+    let message = 'Click "Start Monitoring" to display transactions';
+    
+    if (status === 'connecting') {
+      message = 'Connecting...';
+    } else if (status === 'connected') {
+      message = 'Connection established, waiting for transactions';
+    } else if (status === 'reconnecting') {
+      message = 'Reconnecting, connection lost';
+    }
+
     return (
       <div className="terminal-panel p-8 text-center">
         <div className="text-terminal-muted">
           <div className="text-4xl mb-3">📊</div>
           <p className="text-lg">Waiting for transactions...</p>
           <p className="text-sm mt-2">
-            Click "Start Monitoring" to display transactions
+            {message}
           </p>
         </div>
       </div>
