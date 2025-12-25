@@ -6,6 +6,25 @@ export class JupiterParser extends BaseParser {
   private static JUPITER_V6_PROGRAM_ID = 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4';
   private static JUPITER_LIMIT_ORDER_PROGRAM_ID = 'j1o2qRpjcyUwEvwtcfhEQefh773ZgjxcVRry7LDqg5X';
 
+  private decodeLimitOrderData(data: string): { makingAmount: bigint, takingAmount: bigint } | null {
+    try {
+        const buffer = bs58.decode(data);
+        // Expecting at least 32 bytes for the data structure we identified
+        // 0-7: Discriminator
+        // 8-15: Unknown
+        // 16-23: Making Amount
+        // 24-31: Taking Amount
+        if (buffer.length < 32) return null;
+        
+        const makingAmount = buffer.readBigUInt64LE(16);
+        const takingAmount = buffer.readBigUInt64LE(24);
+        
+        return { makingAmount, takingAmount };
+    } catch (e) {
+        return null;
+    }
+  }
+
   canParse(transaction: HeliusTransaction): boolean {
     const { instructions } = transaction;
     return (
@@ -68,7 +87,7 @@ export class JupiterParser extends BaseParser {
     let displayToken = 'SOL';
     let dex = 'Jupiter';
 
-    // Check for Limit Order Cancel
+    // Check for Limit Order
     const isLimitOrder = instructions?.some((ix: any) => ix.programId === JupiterParser.JUPITER_LIMIT_ORDER_PROGRAM_ID);
     
     if (isLimitOrder) {
@@ -88,6 +107,49 @@ export class JupiterParser extends BaseParser {
                 wallet,
                 tokenAmount,
                 solAmount: 0,
+                timestamp: Date.now(),
+                blockTime: timestamp,
+                displayToken,
+                dex,
+            };
+        }
+
+        // Check if it's a create order (user sending tokens)
+        const outgoing = relevantTransfers.filter(t => t.fromUserAccount === feePayer);
+        if (outgoing.length > 0) {
+            const limitOrderIx = instructions?.find((ix: any) => ix.programId === JupiterParser.JUPITER_LIMIT_ORDER_PROGRAM_ID);
+            let orderSolAmount = 0;
+
+            if (limitOrderIx) {
+                const decoded = this.decodeLimitOrderData(limitOrderIx.data);
+                if (decoded) {
+                    // Check if taking mint is SOL/WSOL
+                    // Assuming index 8 is taking mint based on the example.
+                    const accounts = limitOrderIx.accounts;
+                    if (accounts && accounts.length > 8) {
+                        const takingMint = accounts[8];
+                        const WSOL_MINT = 'So11111111111111111111111111111111111111112';
+                        
+                        if (takingMint === WSOL_MINT) {
+                             const quoteAmount = Number(decoded.takingAmount);
+                             orderSolAmount = quoteAmount / 1e9;
+                        }
+                    }
+                }
+            }
+
+            type = 'SELL';
+            wallet = feePayer;
+            tokenAmount = outgoing.reduce((sum, t) => sum + t.tokenAmount, 0);
+            dex = 'Jupiter Limit Order';
+            
+            return {
+                id: signature,
+                signature,
+                type,
+                wallet,
+                tokenAmount,
+                solAmount: orderSolAmount,
                 timestamp: Date.now(),
                 blockTime: timestamp,
                 displayToken,

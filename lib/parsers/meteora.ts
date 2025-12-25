@@ -1,5 +1,6 @@
 import { HeliusTransaction, Transaction } from '../../types';
 import { BaseParser } from './base';
+import bs58 from 'bs58';
 
 export class MeteoraParser extends BaseParser {
   private static METEORA_DLMM = 'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo';
@@ -9,6 +10,11 @@ export class MeteoraParser extends BaseParser {
     REMOVE_LIQUIDITY: '7FKxUv3oxZY',
     REMOVE_LIQUIDITY_BY_RANGE: 'BH9xzWhK5ook',
     CLAIM_FEE: 'fx9RHbGFfZ9',
+  };
+
+  private static HEX_DISCRIMINATORS = {
+    ADD_LIQUIDITY_ONE_SIDE: '235613b94ed44bd3',
+    ADD_LIQUIDITY_STRATEGY_V2: '5c04b0c177b95309'
   };
 
   canParse(transaction: HeliusTransaction): boolean {
@@ -35,6 +41,20 @@ export class MeteoraParser extends BaseParser {
               ix.data.startsWith(MeteoraParser.DISCRIMINATORS.ADD_LIQUIDITY_STRATEGY)) {
             return this.parseAddLiquidity(transaction, tokenMint, feePayer);
           }
+          
+          // Check Hex Discriminators
+          try {
+            const buffer = bs58.decode(ix.data);
+            const discriminator = buffer.slice(0, 8).toString('hex');
+            
+            if (discriminator === MeteoraParser.HEX_DISCRIMINATORS.ADD_LIQUIDITY_ONE_SIDE || 
+                discriminator === MeteoraParser.HEX_DISCRIMINATORS.ADD_LIQUIDITY_STRATEGY_V2) {
+                 return this.parseAddLiquidity(transaction, tokenMint, feePayer);
+            }
+          } catch (e) {
+            // ignore decode errors
+          }
+
           if (ix.data.startsWith(MeteoraParser.DISCRIMINATORS.REMOVE_LIQUIDITY) ||
               ix.data.startsWith(MeteoraParser.DISCRIMINATORS.REMOVE_LIQUIDITY_BY_RANGE)) {
             return this.parseRemoveLiquidity(transaction, tokenMint, feePayer);
