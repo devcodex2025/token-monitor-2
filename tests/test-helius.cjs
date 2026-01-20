@@ -12,7 +12,7 @@ async function fetchTransaction() {
     console.log('Signature:', SIGNATURE);
     
     const response = await axios.post(
-      `https://api-mainnet.helius-rpc.com/v0/transactions/?api-key=${HELIUS_API_KEY}`,
+      `https://api.helius.xyz/v0/transactions/?api-key=${HELIUS_API_KEY}`,
       {
         transactions: [SIGNATURE],
       },

@@ -65,12 +65,12 @@ const DEX_INFO: Record<string, { name: string; logo?: string; color?: string }> 
   'OKX_DEX_ROUTER': { 
     name: 'OKX DEX', 
     logo: '/logos/okx.webp',
-    color: '#000000'
+    color: '#ffffff'
   },
   'OKX DEX': { 
     name: 'OKX DEX', 
     logo: '/logos/okx.webp',
-    color: '#000000'
+    color: '#ffffff'
   },
   'METEORA DLMM': {  
     name: 'Meteora DLMM', 
@@ -100,7 +100,7 @@ const DEX_INFO: Record<string, { name: string; logo?: string; color?: string }> 
   'ONCHAIN LABS': {
     name: 'Onchain Labs',
     logo: '/logos/okx.webp', // Using OKX logo as fallback since it's related to OKX DEX
-    color: '#000000'
+    color: '#ffffff'
   },
   'PHANTOM': {
     name: 'Phantom',
@@ -109,14 +109,25 @@ const DEX_INFO: Record<string, { name: string; logo?: string; color?: string }> 
   },
 };
 
+// Deduplicated DEX list for filter UI
+const UNIQUE_DEX_LIST = Object.values(DEX_INFO).reduce((acc, current) => {
+  if (!acc.find(item => item.name === current.name)) {
+    acc.push(current);
+  }
+  return acc;
+}, [] as { name: string; logo?: string; color?: string }[]);
+
+
 interface TransactionFeedProps {
   transactions: Transaction[];
   onLoadMore?: () => void;
   isLoadingMore?: boolean;
   status?: 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
+  hasMore?: boolean;
+  scannedCount?: number;
 }
 
-export default function TransactionFeed({ transactions, onLoadMore, isLoadingMore, status = 'disconnected' }: TransactionFeedProps) {
+export default function TransactionFeed({ transactions, onLoadMore, isLoadingMore, status = 'disconnected', hasMore = true, scannedCount = 0 }: TransactionFeedProps) {
   const prevTopTxSig = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isFirstRender = useRef(true);
@@ -155,12 +166,46 @@ export default function TransactionFeed({ transactions, onLoadMore, isLoadingMor
     });
   };
 
+  // Use unique names for selection state
+  const [selectedDexNames, setSelectedDexNames] = useState<Set<string>>(new Set(UNIQUE_DEX_LIST.map(d => d.name)));
+  const [showDexFilter, setShowDexFilter] = useState(false);
+  const [showTypeFilter, setShowTypeFilter] = useState(false);
+
+  const toggleDexName = (name: string) => {
+    setSelectedDexNames(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(name)) {
+        newSet.delete(name);
+      } else {
+        newSet.add(name);
+      }
+      return newSet;
+    });
+  };
+
   // Filter and sort transactions
   const filteredAndSortedTransactions = useMemo(() => {
     return [...transactions]
       .filter(tx => selectedTypes.has(tx.type))
+      .filter(tx => {
+        // Resolve transaction DEX to a display name
+        let dexName = tx.dex;
+        
+        // Check if tx.dex is a key in the config
+        if (DEX_INFO[tx.dex]) {
+           dexName = DEX_INFO[tx.dex].name;
+        } else {
+           // Fallback: check if tx.dex matches any known name value
+           const knownInfo = Object.values(DEX_INFO).find(info => info.name === tx.dex);
+           if (knownInfo) dexName = knownInfo.name;
+        }
+        
+        // If the resolved name is one of our managed DEX filters, check if it's selected
+        const isKnownFilter = UNIQUE_DEX_LIST.some(d => d.name === dexName);
+        return isKnownFilter ? selectedDexNames.has(dexName) : true;
+      })
       .sort((a, b) => b.blockTime - a.blockTime);
-  }, [transactions, selectedTypes]);
+  }, [transactions, selectedTypes, selectedDexNames]);
 
   // Sort transactions by date (newest first)
   const sortedTransactions = filteredAndSortedTransactions;
@@ -223,29 +268,142 @@ export default function TransactionFeed({ transactions, onLoadMore, isLoadingMor
     <div className="terminal-panel overflow-hidden flex flex-col h-[600px]">
       <div className="bg-terminal-bg border-b border-terminal-border px-4 py-3 flex items-center justify-between flex-shrink-0">
         <h2 className="text-lg font-semibold">Transaction Feed</h2>
-        <div className="text-sm text-terminal-muted">
-          {sortedTransactions.length} / {transactions.length} transactions
+        <div className="text-sm text-terminal-muted flex items-center gap-3">
+          {scannedCount > 0 && (
+            <div className="flex items-center gap-1 group relative cursor-help">
+              <span className="flex items-center gap-1">
+                 <span className="text-xs">🔍</span> {scannedCount} scanned
+              </span>
+              <div className="absolute bottom-full left-0 mb-2 w-64 p-2 bg-terminal-panel border border-terminal-border rounded shadow-xl hidden group-hover:block z-50 text-xs">
+                 <p className="font-semibold mb-1 border-b border-terminal-border/50 pb-1">Filtering Details</p>
+                 <p className="text-terminal-muted">Scanned {scannedCount} blocks to find {transactions.length} relevant transactions.</p>
+                 <p className="mt-1 text-terminal-muted italic">Non-relevant txs (spam, other pairs) are skipped automatically.</p>
+              </div>
+            </div>
+          )}
+          <span>
+            {sortedTransactions.length} shown {transactions.length !== sortedTransactions.length ? `(of ${transactions.length} loaded)` : ''}
+          </span>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-terminal-surface/30 border-b border-terminal-border px-4 py-2 flex flex-wrap gap-2 flex-shrink-0">
-        <span className="text-xs text-terminal-muted self-center">Show:</span>
-        {TRANSACTION_TYPES.map(type => (
-          <button
-            key={type.value}
-            onClick={() => toggleFilter(type.value)}
-            className={`text-xs px-2 py-1 rounded transition-colors ${
-              selectedTypes.has(type.value)
-                ? 'bg-terminal-success/20 text-terminal-success border border-terminal-success/50'
-                : 'bg-terminal-bg/50 text-terminal-muted border border-terminal-border hover:border-terminal-muted/50'
+      <div className="bg-terminal-surface/30 border-b border-terminal-border px-4 py-2 flex items-center justify-start gap-3 flex-shrink-0 z-20 relative">
+        <div className="relative">
+          <button 
+            onClick={() => setShowTypeFilter(!showTypeFilter)}
+            className={`text-xs px-3 py-1 rounded transition-colors flex items-center gap-2 border ${
+              showTypeFilter
+                ? 'bg-terminal-surface border-terminal-border text-terminal-text shadow-sm'
+                : selectedTypes.size !== TRANSACTION_TYPES.length 
+                  ? 'bg-terminal-primary/20 text-terminal-primary border-transparent' 
+                  : 'bg-terminal-bg/50 text-terminal-muted border-transparent hover:bg-terminal-surface'
             }`}
           >
-            <span className="mr-1">{type.emoji}</span>
-            {type.label}
+            <span>🏷️</span> TX Types {selectedTypes.size !== TRANSACTION_TYPES.length ? `(${selectedTypes.size})` : ''}
           </button>
-        ))}
+
+          {showTypeFilter && (
+            <>
+              {/* Overlay to close on click outside */}
+              <div className="fixed inset-0 z-10" onClick={() => setShowTypeFilter(false)} />
+              
+              {/* Popup */}
+              <div className="absolute left-0 top-full mt-2 w-64 bg-terminal-panel border border-terminal-border rounded-lg shadow-xl shadow-black/50 p-3 z-20">
+                <div className="flex justify-between items-center mb-3 pb-2 border-b border-terminal-border">
+                  <span className="text-xs font-semibold text-terminal-text">Filter by Type</span>
+                  <div className="flex gap-2">
+                    <button onClick={() => setSelectedTypes(new Set(TRANSACTION_TYPES.map(t => t.value)))} className="text-[10px] text-terminal-success hover:underline">Select All</button>
+                    <button onClick={() => setSelectedTypes(new Set())} className="text-[10px] text-terminal-muted hover:underline">Clear</button>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 gap-1">
+                  {TRANSACTION_TYPES.map(type => {
+                    const isSelected = selectedTypes.has(type.value);
+                    return (
+                      <button
+                        key={type.value}
+                        onClick={() => toggleFilter(type.value)}
+                        className={`text-xs px-2 py-1.5 rounded transition-all flex items-center gap-2 w-full text-left border ${
+                          isSelected
+                            ? 'bg-terminal-surface border-terminal-border'
+                            : 'opacity-50 hover:opacity-100 border-transparent'
+                        }`}
+                      >
+                         <div className={`w-4 h-4 rounded flex items-center justify-center border ${isSelected ? 'border-terminal-primary bg-terminal-primary/20' : 'border-terminal-muted'}`}>
+                            {isSelected && <span className="text-[10px] text-terminal-primary">✓</span>}
+                         </div>
+                         <span className="w-5 text-center">{type.emoji}</span>
+                        <span className={isSelected ? 'text-terminal-text' : 'text-terminal-muted'}>{type.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="relative">
+          <button 
+            onClick={() => setShowDexFilter(!showDexFilter)}
+            className={`text-xs px-3 py-1 rounded transition-colors flex items-center gap-2 border ${
+              showDexFilter
+                ? 'bg-terminal-surface border-terminal-border text-terminal-text shadow-sm'
+                : selectedDexNames.size !== UNIQUE_DEX_LIST.length 
+                  ? 'bg-terminal-primary/20 text-terminal-primary border-transparent' 
+                  : 'bg-terminal-bg/50 text-terminal-muted border-transparent hover:bg-terminal-surface'
+            }`}
+          >
+            <span>🏢</span> DEXes {selectedDexNames.size !== UNIQUE_DEX_LIST.length ? `(${selectedDexNames.size})` : ''}
+          </button>
+
+          {showDexFilter && (
+            <>
+              {/* Overlay to close on click outside */}
+              <div className="fixed inset-0 z-10" onClick={() => setShowDexFilter(false)} />
+              
+              {/* Popup */}
+              <div className="absolute left-0 top-full mt-2 w-72 bg-terminal-panel border border-terminal-border rounded-lg shadow-xl shadow-black/50 p-3 z-20">
+                <div className="flex justify-between items-center mb-3 pb-2 border-b border-terminal-border">
+                  <span className="text-xs font-semibold text-terminal-text">Filter by DEX</span>
+                  <div className="flex gap-2">
+                    <button onClick={() => setSelectedDexNames(new Set(UNIQUE_DEX_LIST.map(d => d.name)))} className="text-[10px] text-terminal-success hover:underline">Select All</button>
+                    <button onClick={() => setSelectedDexNames(new Set())} className="text-[10px] text-terminal-muted hover:underline">Clear</button>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 gap-1 max-h-64 overflow-y-auto">
+                  {UNIQUE_DEX_LIST.map(info => {
+                    const isSelected = selectedDexNames.has(info.name);
+                    return (
+                      <button
+                        key={info.name}
+                        onClick={() => toggleDexName(info.name)}
+                        className={`text-xs px-2 py-1.5 rounded transition-all flex items-center gap-2 w-full text-left border ${
+                          isSelected
+                            ? 'bg-terminal-surface border-terminal-border'
+                            : 'opacity-50 hover:opacity-100 border-transparent'
+                        }`}
+                        style={isSelected ? { borderColor: info.color } : {}}
+                      >
+                         <div className={`w-4 h-4 rounded-full flex items-center justify-center border ${isSelected ? '' : 'border-terminal-muted'}`} style={{ borderColor: isSelected ? info.color : undefined }}>
+                            {isSelected && <div className="w-2 h-2 rounded-full" style={{ backgroundColor: info.color }}></div>}
+                         </div>
+                        <img src={info.logo || '/logos/phantom.svg'} alt={info.name} className="w-4 h-4 rounded-full" onError={(e) => { (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMiIgY3k9“12”IHI9IjEwIi8+PC9zdmc+' }} />
+                        <span className={isSelected ? 'text-terminal-text' : 'text-terminal-muted'}>{info.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
+
+      {/* Legacy DEX Filters - Removed */}
 
       {/* Table Header */}
       <div className="flex items-center gap-4 px-4 py-2 bg-terminal-surface/50 border-b border-terminal-border text-xs font-medium text-terminal-muted uppercase tracking-wider flex-shrink-0">
@@ -262,15 +420,35 @@ export default function TransactionFeed({ transactions, onLoadMore, isLoadingMor
           <TransactionRow key={tx.id} transaction={tx} />
         ))}
         
-        {onLoadMore && (
+        {onLoadMore && hasMore && (
           <div className="p-4 text-center border-t border-terminal-border/50">
             <button
               onClick={onLoadMore}
               disabled={isLoadingMore}
-              className="px-4 py-2 rounded bg-terminal-surface text-terminal-text hover:bg-terminal-surface/80 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed w-full"
+              className="px-4 py-2 rounded bg-terminal-surface text-terminal-text border border-terminal-border hover:bg-terminal-surface/80 hover:border-terminal-text/50 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed w-full group relative"
             >
-              {isLoadingMore ? 'Loading history...' : 'Load older transactions'}
+              {isLoadingMore ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin h-4 w-4 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Scanning history ({scannedCount} blocks)...
+                  </span>
+              ) : (
+                  'Load 100 older transactions'
+              )}
             </button>
+            {isLoadingMore && (
+                <p className="text-[10px] text-terminal-muted mt-2 animate-pulse">
+                    Deep scanning in progress. Filtering spam & generic transfers...
+                </p>
+            )}
+          </div>
+        )}
+        {onLoadMore && !hasMore && (
+          <div className="p-4 text-center border-t border-terminal-border/50 text-terminal-muted text-sm">
+            End of transaction history
           </div>
         )}
       </div>

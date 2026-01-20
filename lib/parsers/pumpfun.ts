@@ -10,6 +10,7 @@ export class PumpFunParser extends BaseParser {
     const { source, instructions } = transaction;
     return (
       source === 'PUMP_FUN' ||
+      source === 'PUMP_AMM' ||
       instructions?.some((ix: any) => ix.programId === PumpFunParser.PUMP_FUN_PROGRAM_ID) ||
       false
     );
@@ -28,10 +29,16 @@ export class PumpFunParser extends BaseParser {
       const bondingCurveAddress = bondingCurve.toBase58();
 
       // Find the token transfer involving the bonding curve
-      const curveTransfer = tokenTransfers?.find(t => 
+      let curveTransfer = tokenTransfers?.find(t => 
         t.mint === tokenMint && 
         (t.fromUserAccount === bondingCurveAddress || t.toUserAccount === bondingCurveAddress)
       );
+
+      // Relaxed Fallback: If source is explicitly PUMP_FUN/AMM but we missed the curve transfer (maybe different curve address?),
+      // find ANY transfer of the token and assume it's the right one.
+      if (!curveTransfer && (transaction.source === 'PUMP_FUN' || transaction.source === 'PUMP_AMM')) {
+        curveTransfer = tokenTransfers?.find(t => t.mint === tokenMint);
+      }
 
       if (!curveTransfer) {
         return null;
@@ -41,14 +48,29 @@ export class PumpFunParser extends BaseParser {
       let wallet: string;
 
       // Determine direction based on flow relative to Bonding Curve
-      if (curveTransfer.fromUserAccount === bondingCurveAddress) {
+      // If we used the fallback, we might not have matched bondingCurveAddress
+      const isFromCurve = curveTransfer.fromUserAccount === bondingCurveAddress;
+      const isToCurve = curveTransfer.toUserAccount === bondingCurveAddress;
+
+      if (isFromCurve) {
         // Bonding Curve sends tokens -> User BUYS
         type = 'BUY';
         wallet = curveTransfer.toUserAccount;
-      } else {
+      } else if (isToCurve) {
         // User sends tokens to Bonding Curve -> User SELLS
         type = 'SELL';
         wallet = curveTransfer.fromUserAccount;
+      } else {
+        // Semantic fallback if curve address didn't match:
+        // If the user (feePayer) is the recipient, it's a BUY.
+        if (curveTransfer.toUserAccount === transaction.feePayer) {
+            type = 'BUY';
+            wallet = curveTransfer.toUserAccount;
+        } else {
+            // Otherwise assume SELL (user is sender)
+            type = 'SELL';
+            wallet = curveTransfer.fromUserAccount;
+        }
       }
 
       // Calculate SOL amount

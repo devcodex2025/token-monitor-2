@@ -2,7 +2,7 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../.env.local') });
 
 const signature = '2jTVXxVd3n7rfi1HjNTAP7qZVAECNpTNEWjEim39mKWqALoDUvsDYvtCSEUwoaEM9GwPkrutAHR4JVZzehnnkoQo';
-const url = `https://api-mainnet.helius-rpc.com/v0/transactions/?api-key=${process.env.HELIUS_API_KEY}`;
+const url = `https://api.helius.xyz/v0/transactions/?api-key=${process.env.HELIUS_API_KEY}`;
 
 fetch(url, {
   method: 'POST',

@@ -30,10 +30,32 @@ export class TransactionParser {
     return this.parseGeneric(heliusTx, tokenMint);
   }
 
-  static parseMultiple(heliusTxs: HeliusTransaction[], tokenMint: string): Transaction[] {
-    return heliusTxs
-      .map((tx) => this.parse(tx, tokenMint))
+  static parseMultiple(heliusTxs: HeliusTransaction[], tokenMint: string): { parsedTxs: Transaction[], skipReasons: Record<string, number> } {
+    let skippedCount = 0;
+    const skipReasons: Record<string, number> = {};
+
+    const parsedTxs = heliusTxs
+      .map((tx) => {
+        const parsed = this.parse(tx, tokenMint);
+        if (!parsed) {
+          skippedCount++;
+          // Aggregate skip statistics
+          const reasonKey = `[Type: ${tx.type}, Source: ${tx.source}]`;
+          skipReasons[reasonKey] = (skipReasons[reasonKey] || 0) + 1;
+        }
+        return parsed;
+      })
       .filter((tx): tx is Transaction => tx !== null);
+      
+    if (skippedCount > 0) {
+      console.log(`[Parser] Skipped ${skippedCount}/${heliusTxs.length} transactions in this batch.`);
+      console.log('[Parser] Skip reasons breakdown:');
+      Object.entries(skipReasons).forEach(([reason, count]) => {
+        console.log(`  - ${reason}: ${count} txs`);
+      });
+    }
+    
+    return { parsedTxs, skipReasons };
   }
 
   // Legacy generic parser for unknown DEXes or simple transfers
@@ -43,24 +65,35 @@ export class TransactionParser {
 
       // Check if this is a simple wallet-to-wallet transfer
       // Relaxed check: Accept any TRANSFER type, or specific sources known for transfers
-      const isSimpleTransfer = type === 'TRANSFER' || type === 'transfer' || source === 'SOLANA_PROGRAM_LIBRARY' || source === 'SYSTEM_PROGRAM';
+      const isSimpleTransfer = type === 'TRANSFER' || type === 'transfer' || source === 'SYSTEM_PROGRAM' || source === 'SOLANA_PROGRAM_LIBRARY';
       
-      if (isSimpleTransfer) {
+      const hasTokenTransfer = tokenTransfers?.some(t => t.mint === tokenMint);
+
+      if (!hasTokenTransfer) {
+        return null;
+      }
+
+      // If Explicit Transfer OR (Unknown Type AND Unknown Source)
+      // We will try to parse as Transfer. 
+      // BUT: If it's UNKNOWN type but KNOWN Source (e.g. METEORA), we want to fall through to SWAP logic first.
+      // So we only force "Transfer" return if it looks very standard.
+      if (isSimpleTransfer || (type === 'UNKNOWN' && source === 'UNKNOWN')) {
         const tokenTransfer = tokenTransfers?.find(t => t.mint === tokenMint);
-        if (!tokenTransfer) return null;
         
-        return {
-          id: signature,
-          signature,
-          type: 'TRANSFER',
-          wallet: tokenTransfer.fromUserAccount || feePayer || '',
-          tokenAmount: tokenTransfer.tokenAmount || 0,
-          solAmount: 0,
-          timestamp: Date.now(),
-          blockTime: timestamp,
-          displayToken: 'Transfer',
-          dex: source,
-        };
+        if (tokenTransfer) {
+            return {
+            id: signature,
+            signature,
+            type: 'TRANSFER',
+            wallet: tokenTransfer.fromUserAccount || feePayer || '',
+            tokenAmount: tokenTransfer.tokenAmount || 0,
+            solAmount: 0,
+            timestamp: Date.now(),
+            blockTime: timestamp,
+            displayToken: 'Transfer',
+            dex: source,
+            };
+        }
       }
 
       if (!tokenTransfers || tokenTransfers.length === 0) {
@@ -71,6 +104,10 @@ export class TransactionParser {
       const tokenTransfer = tokenTransfers.find(
         (transfer) => transfer.mint === tokenMint
       );
+
+      // This logic handles SWAPS (Buy/Sell)
+      // It is robust enough to handle UNKNOWN sources as long as there is a token transfer
+      // So we just let it run for almost everything that wasn't a simple transfer.
 
       if (!tokenTransfer) {
         return null;
@@ -107,9 +144,22 @@ export class TransactionParser {
           isBuy = false;
           actualWallet = fromAccount;
         } else {
-          // Default to BUY if unclear
-          isBuy = true;
-          actualWallet = toAccount;
+            // RELAXED FALLBACK for "Unknown" parsed transactions:
+            // If we can't be sure, assume the Fee Payer is the initiator/user.
+            // If Fee Payer received tokens -> BUY.
+            // If Fee Payer sent tokens -> SELL.
+            if (feePayer === toAccount) {
+                isBuy = true;
+                actualWallet = feePayer;
+            } else if (feePayer === fromAccount) {
+                isBuy = false;
+                actualWallet = feePayer;
+            } else {
+                // If fee payer is neither (maybe 3rd party payer?), defaulting to BUY (safe assumption for visualization)
+                // or checking which side looks more like a user wallet?
+                isBuy = true;
+                actualWallet = toAccount;
+            }
         }
       }
 

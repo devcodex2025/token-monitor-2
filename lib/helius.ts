@@ -14,7 +14,7 @@ export class HeliusService {
   ): Promise<HeliusTransaction[]> {
     try {
       const limit = options.limit || 100;
-      let url = `https://api-mainnet.helius-rpc.com/v0/addresses/${tokenAddress}/transactions?api-key=${this.apiKey}&limit=${limit}&commitment=confirmed`;
+      let url = `https://api.helius.xyz/v0/addresses/${tokenAddress}/transactions?api-key=${this.apiKey}&limit=${limit}&commitment=confirmed`;
       
       if (options.before) {
         url += `&before=${options.before}`;
@@ -35,7 +35,7 @@ export class HeliusService {
   async getEnhancedTransaction(signature: string): Promise<HeliusTransaction | null> {
     try {
       const response = await axios.post(
-        `https://api-mainnet.helius-rpc.com/v0/transactions/?api-key=${this.apiKey}`,
+        `https://api.helius.xyz/v0/transactions/?api-key=${this.apiKey}`,
         {
           transactions: [signature],
         },

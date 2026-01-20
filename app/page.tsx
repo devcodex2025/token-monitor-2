@@ -27,6 +27,9 @@ export default function Home() {
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'reconnecting'>('disconnected');
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [lastScannedSignature, setLastScannedSignature] = useState<string | null>(null);
+  const [scannedCount, setScannedCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({ 
     total: 0, 
@@ -59,8 +62,11 @@ export default function Home() {
 
     setIsLoading(true);
     setConnectionStatus('connecting');
+    setHasMore(true);
+    setScannedCount(0);
     setError(null);
     setTransactions([]);
+    setLastScannedSignature(null);
     
     // Only clear token info if it's a new token to avoid UI jumping
     // We can check if the current input matches the last saved one, but since we just saved it,
@@ -94,7 +100,23 @@ export default function Home() {
         if (!response.ok) throw new Error('Failed to fetch transactions');
 
         const data = await response.json();
-        setTransactions(data.transactions || []);
+        const txs = data.transactions || [];
+        setTransactions(txs);
+        
+        if (data.lastSignature) {
+          setLastScannedSignature(data.lastSignature);
+        }
+
+        if (typeof data.rawCount === 'number') {
+          setScannedCount(data.rawCount);
+        }
+
+        // Use server-provided hasMore flag if available, otherwise fallback to length check
+        if (typeof data.hasMore === 'boolean') {
+          setHasMore(data.hasMore);
+        } else if (txs.length < 100) {
+          setHasMore(false);
+        }
       } else {
         // Connect to WebSocket only in live mode
         connectWebSocket();
@@ -109,17 +131,28 @@ export default function Home() {
   };
 
   const loadMore = async () => {
-    if (transactions.length === 0 || isLoadingMore) return;
+    if ((transactions.length === 0 && !lastScannedSignature) || isLoadingMore) return;
 
     setIsLoadingMore(true);
     try {
-      const lastTx = transactions[transactions.length - 1];
+      const lastTx = transactions.length > 0 ? transactions[transactions.length - 1] : null;
+      // Use lastScannedSignature from API if available to avoid loops when filtering skips everything
+      // Otherwise fall back to the last visible transaction signature
+      const beforeCursor = lastScannedSignature || (lastTx ? lastTx.signature : null);
+
+      if (!beforeCursor) {
+        console.warn('No cursor available for pagination');
+        setIsLoadingMore(false);
+        return;
+      }
+      
+      console.log('Loading more before:', beforeCursor);
       const response = await fetch('/api/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tokenAddress: config.tokenAddress,
-          before: lastTx.signature,
+          before: beforeCursor,
         }),
       });
 
@@ -127,13 +160,55 @@ export default function Home() {
 
       const data = await response.json();
       const newTransactions = data.transactions || [];
+      
+      if (typeof data.rawCount === 'number') {
+        setScannedCount(prev => prev + data.rawCount);
+      }
+      
+      let nextCursor = data.lastSignature;
+      if (!nextCursor && newTransactions.length > 0) {
+        nextCursor = newTransactions[newTransactions.length - 1].signature;
+      }
+      
+      if (nextCursor) {
+        setLastScannedSignature(nextCursor);
+      }
+
+      console.log(`Loaded ${newTransactions.length} older transactions`);
+
+
+      // Use server-provided hasMore flag if available
+      if (typeof data.hasMore === 'boolean') {
+        setHasMore(data.hasMore);
+      } else if (newTransactions.length < 100) {
+        setHasMore(false);
+      }
 
       if (newTransactions.length > 0) {
-        setTransactions((prev) => [...prev, ...newTransactions]);
+        setTransactions((prev) => {
+          // Filter out any duplicates just in case
+          const prevSignatures = new Set(prev.map(tx => tx.signature));
+          const uniqueNew = newTransactions.filter((tx: Transaction) => !prevSignatures.has(tx.signature));
+          
+          if (uniqueNew.length === 0) {
+            console.log('No new unique transactions found');
+            return prev;
+          }
+          
+          return [...prev, ...uniqueNew];
+        });
       }
+      
+      // Auto-load logic no longer strictly needed as backend aggregates, 
+      // but if backend timeout limitation returned 0 despite hasMore, we might want to let user click again or auto
+      // For now, simpler: IF 0 items returned but hasMore is true, user can click "Load More" again (which says Scanning...)
+      // But we removed auto-load to respect "user clicks per 100" logic more strictly
+      // Actually if backend tries hard (5 attempts) and finds 0, it's safer to stop and let user decide to continue 
+      // than infinite loop frontend.
+      
+      setIsLoadingMore(false);
     } catch (err) {
       console.error('Error loading more:', err);
-    } finally {
       setIsLoadingMore(false);
     }
   };
@@ -299,11 +374,15 @@ export default function Home() {
 
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-terminal-panel border border-terminal-border text-xs font-medium text-terminal-muted transition-colors duration-300">
             <span className="relative flex h-2 w-2">
-              <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 transition-all duration-500 ${connectionStatus === 'connected' ? 'animate-ping bg-terminal-success' : 'bg-terminal-danger'}`}></span>
-              <span className={`relative inline-flex rounded-full h-2 w-2 transition-all duration-500 ${connectionStatus === 'connected' ? 'bg-terminal-success' : 'bg-terminal-danger'}`}></span>
+              <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 transition-all duration-500 ${(connectionStatus === 'connected' || (isMonitoring && config.mode === 'all')) ? 'animate-ping bg-terminal-success' : 'bg-terminal-danger'}`}></span>
+              <span className={`relative inline-flex rounded-full h-2 w-2 transition-all duration-500 ${(connectionStatus === 'connected' || (isMonitoring && config.mode === 'all')) ? 'bg-terminal-success' : 'bg-terminal-danger'}`}></span>
             </span>
             <span className="transition-opacity duration-300">
-              {connectionStatus === 'connected' ? 'System Online' : 'System Offline'}
+              {connectionStatus === 'connected' 
+                ? 'System Online' 
+                : (isMonitoring && config.mode === 'all') 
+                  ? 'System Online (historic mode)' 
+                  : 'System Offline'}
             </span>
           </div>
         </div>
@@ -420,6 +499,8 @@ export default function Home() {
               onLoadMore={loadMore}
               isLoadingMore={isLoadingMore}
               status={connectionStatus}
+              hasMore={hasMore}
+              scannedCount={scannedCount}
             />
           </div>
         </div>
