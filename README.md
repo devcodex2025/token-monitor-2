@@ -87,7 +87,7 @@ The project has own token - [$TMR](https://bags.fm/AUJgYtx8hif6tWxd79hGdwiitKMxs
 Token listed on [Bags.fm](https://bags.fm/AUJgYtx8hif6tWxd79hGdwiitKMxsVRrSpz8hT4uBAGS)
 ![Bags.fm logo](public/bags-logo.png)
 
-## � Currency Conversion
+## 💸 Currency Conversion
 
 The monitor automatically converts **USDC** and **USDT** transactions to **SOL equivalents** for consistent volume tracking. Original amounts are displayed in parentheses for verification.
 
