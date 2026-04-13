@@ -101,11 +101,11 @@ The monitor automatically converts **USDC** and **USDT** transactions to **SOL e
 - **Note**: Update `SOL_PRICE_USD` constant for accurate conversion
 
 ## Countribution
-- *** If you see some bug
-- *** Some feature that we can add
-- *** Some new opportunities
-- *** Smoother UI/UX design
-- *** You are welcome!
+- ** If you see some bug
+- ** Some feature that we can add
+- ** Some new opportunities
+- ** Smoother UI/UX design
+- ** You are welcome!
 
 ## 📄 License
 
