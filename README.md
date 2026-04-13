@@ -88,7 +88,7 @@ Token listed on [Bags.fm](https://bags.fm/AUJgYtx8hif6tWxd79hGdwiitKMxsVRrSpz8hT
 Inside our app we using Helius technology
 
 [![Bags.fm logo](public/bags-logo_32px.png)](https://bags.fm/AUJgYtx8hif6tWxd79hGdwiitKMxsVRrSpz8hT4uBAGS)     [![Token Monitor logo](public/pump-monitor-logo-opt_64x32.webp)](https://bags.fm/AUJgYtx8hif6tWxd79hGdwiitKMxsVRrSpz8hT4uBAGS)     <a href="https://helius.dev">
-  <img src="public/helius-logo.svg" height="32" />
+  <img src="public/helius_logo.svg" height="32" />
 </a>
 
 ## 💸 Currency Conversion
