@@ -25,6 +25,15 @@ A real-time transaction tracker for Solana tokens, powered by **Helius Webhooks*
   - 📟 **CLI Mode**: Lightweight terminal interface
 - **Data Source**: Powered by [Helius Webhooks](https://docs.helius.dev/webhooks-and-websockets/webhooks)
 
+
+## 🎥 Introduction to Token Monitor web application
+
+<video src="https://github.com/devcodex2025/token-monitor/public/token-monitor-introduction.mp4" width="100%" controls autoplay loop muted>
+  Your browser does not support the video tag.
+</video>
+
+<p align="center"><strong>Introduction to Token Monitor web application</strong></p>
+
 ## Quick Start
 
 ### 1. Installation
